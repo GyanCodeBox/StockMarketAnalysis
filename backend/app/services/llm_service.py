@@ -105,6 +105,16 @@ class LLMService:
         indicators: Dict[str, Any]
     ) -> str:
         """Build the prompt for LLM analysis"""
+        vol_analysis = indicators.get('volume_analysis', {})
+        avg_vol = vol_analysis.get('average_volume', 'N/A')
+        if isinstance(avg_vol, (int, float)):
+             avg_vol = f"{avg_vol:,.0f}"
+             
+        current_vol = quote.get('volume', 0)
+        vol_display = f"{current_vol:,}"
+        if current_vol == 0:
+            vol_display += " (Market likely closed or data unavailable)"
+
         prompt = f"""Analyze the following stock data and provide a clear, concise technical analysis in plain language.
 
 Stock Symbol: {symbol}
@@ -113,7 +123,7 @@ Change: {quote.get('change', 0):.2f} ({quote.get('change_percent', 0):.2f}%)
 Open: ₹{quote.get('open', 'N/A')}
 High: ₹{quote.get('high', 'N/A')}
 Low: ₹{quote.get('low', 'N/A')}
-Volume: {quote.get('volume', 'N/A'):,}
+Volume: {vol_display}
 
 Technical Indicators:
 - 20-day SMA: ₹{indicators.get('sma_20', 'N/A')}
@@ -121,13 +131,14 @@ Technical Indicators:
 - Price Trend: {indicators.get('price_trend', 'N/A')}
 - Support Levels: ₹{', ₹'.join(map(str, indicators.get('support_levels', [])))}
 - Resistance Levels: ₹{', ₹'.join(map(str, indicators.get('resistance_levels', [])))}
-- Volume Trend: {indicators.get('volume_analysis', {}).get('volume_trend', 'N/A')}
+- Average Volume (20d): {avg_vol}
+- Volume Trend: {vol_analysis.get('volume_trend', 'N/A')}
 - Volatility: {indicators.get('volatility', 'N/A')}%
 
 Please provide:
 1. A brief overview of the current price action
 2. Key technical observations (support/resistance, moving averages, trend)
-3. Volume analysis
+3. Volume analysis (Compare current volume to average volume if available. If current volume is 0, focus on the volume trend and average volume)
 4. Overall assessment (bullish/bearish/neutral)
 5. Key levels to watch
 

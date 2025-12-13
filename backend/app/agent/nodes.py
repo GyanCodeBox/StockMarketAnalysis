@@ -38,7 +38,7 @@ def fetch_stock_data_node(state: AgentState) -> AgentState:
         quote = kite_service.get_quote(symbol, exchange)
         
         # Fetch OHLC data (historical) - will use mock data if API fails
-        ohlc_data = kite_service.get_ohlc(symbol, exchange)
+        ohlc_data = kite_service.get_ohlc(symbol, exchange, days=180)
         
         # Verify we got valid data (both methods return mock data if API fails, so this should always succeed)
         if not quote or not ohlc_data:
@@ -46,6 +46,15 @@ def fetch_stock_data_node(state: AgentState) -> AgentState:
             # Still set the data even if empty - the service methods always return something
             quote = quote or {}
             ohlc_data = ohlc_data or {}
+        
+        # Fallback for volume if market is closed (volume might be 0)
+        # We use the volume from the last OHLC data point
+        if quote.get("volume") == 0 and ohlc_data.get("data"):
+            last_ohlc = ohlc_data["data"][-1]
+            last_vol = last_ohlc.get("volume") or last_ohlc.get("Volume") or 0
+            if last_vol > 0:
+                quote["volume"] = last_vol
+                logger.info(f"Using historical volume {last_vol} as quote volume is 0")
         
         state["quote"] = quote
         state["ohlc_data"] = ohlc_data
