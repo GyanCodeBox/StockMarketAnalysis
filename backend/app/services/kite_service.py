@@ -265,3 +265,84 @@ class KiteService:
             "to_date": datetime.now().isoformat()
         }
 
+    def search_symbols(self, query: str, exchange: str = "NSE") -> list[Dict[str, Any]]:
+        """
+        Search for symbols matching the query
+        
+        Args:
+            query: Search query string
+            exchange: Exchange to search in
+            
+        Returns:
+            List of matching instruments
+        """
+        if not query:
+            return []
+            
+        query = query.upper()
+        results = []
+        
+        if self.kite:
+            try:
+                # Get all instruments for the exchange
+                # Ideally we should cache this list as it's large and doesn't change often during the day
+                cache_key = f"all_instruments_{exchange}"
+                
+                if not hasattr(self, '_all_instruments_cache'):
+                    self._all_instruments_cache = {}
+                
+                if cache_key not in self._all_instruments_cache:
+                    logger.info(f"Fetching all instruments for {exchange} to cache")
+                    self._all_instruments_cache[cache_key] = self.kite.instruments(exchange)
+                
+                instruments = self._all_instruments_cache[cache_key]
+                
+                # Filter locally
+                count = 0
+                for instrument in instruments:
+                    if count >= 10:  # Limit results
+                        break
+                        
+                    tradingsymbol = instrument.get("tradingsymbol", "")
+                    name = instrument.get("name", "")
+                    
+                    if query in tradingsymbol or (name and query in name.upper()):
+                        results.append({
+                            "symbol": tradingsymbol,
+                            "name": name,
+                            "exchange": exchange,
+                            "instrument_token": instrument.get("instrument_token")
+                        })
+                        count += 1
+                        
+                return results
+                
+            except Exception as e:
+                logger.error(f"Error searching symbols in Kite: {e}")
+                # Fall through to mock
+        
+        # Mock search results
+        mock_companies = [
+            ("RELIANCE", "Reliance Industries"),
+            ("TCS", "Tata Consultancy Services"),
+            ("INFY", "Infosys"),
+            ("HDFCBANK", "HDFC Bank"),
+            ("ICICIBANK", "ICICI Bank"),
+            ("BHARTIARTL", "Bharti Airtel"),
+            ("SBIN", "State Bank of India"),
+            ("ITC", "ITC Limited"),
+            ("LT", "Larsen & Toubro"),
+            ("HINDUNILVR", "Hindustan Unilever")
+        ]
+        
+        for symbol, name in mock_companies:
+            if query in symbol or (name and query in name.upper()):
+                results.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "exchange": exchange,
+                    "instrument_token": 0
+                })
+        
+        return results
+

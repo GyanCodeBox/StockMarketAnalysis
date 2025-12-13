@@ -78,3 +78,38 @@ async def analyze_stock(request: AnalyzeRequest):
         )
 
 
+class SearchRequest(BaseModel):
+    query: str = Field(..., description="Search query")
+    exchange: Optional[str] = Field(default="NSE", description="Exchange code")
+
+
+class SearchResponse(BaseModel):
+    results: list[dict]
+    count: int
+
+
+@router.post("/search", response_model=SearchResponse)
+async def search_stocks(request: SearchRequest):
+    """
+    Search for stock symbols
+    """
+    try:
+        from app.services.kite_service import KiteService
+        kite_service = KiteService()
+        
+        results = kite_service.search_symbols(
+            query=request.query,
+            exchange=request.exchange or "NSE"
+        )
+        
+        return SearchResponse(
+            results=results,
+            count=len(results)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
