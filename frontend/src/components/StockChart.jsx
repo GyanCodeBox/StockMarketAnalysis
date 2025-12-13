@@ -5,6 +5,7 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
+  const legendRef = useRef(null)
 
   useEffect(() => {
     if (!chartContainerRef.current || !ohlcData?.data) return
@@ -177,6 +178,40 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
       sma50Series.setData(sma50Data)
     }
 
+    // Subscribe to crosshair move
+    chart.subscribeCrosshairMove(param => {
+      if (!legendRef.current) return;
+
+      if (
+        param.point === undefined ||
+        !param.time ||
+        param.point.x < 0 ||
+        param.point.x > chartContainerRef.current.clientWidth ||
+        param.point.y < 0 ||
+        param.point.y > chartContainerRef.current.clientHeight
+      ) {
+        legendRef.current.style.display = 'none';
+        return;
+      }
+
+      legendRef.current.style.display = 'block';
+      const ohlc = param.seriesData.get(candlestickSeries);
+
+      if (ohlc) {
+        const { open, high, low, close } = ohlc;
+        const color = close >= open ? 'text-green-600' : 'text-red-600';
+
+        legendRef.current.innerHTML = `
+          <div class="flex gap-4">
+            <div>O: <span class="${color}">${open.toFixed(2)}</span></div>
+            <div>H: <span class="${color}">${high.toFixed(2)}</span></div>
+            <div>L: <span class="${color}">${low.toFixed(2)}</span></div>
+            <div>C: <span class="${color}">${close.toFixed(2)}</span></div>
+          </div>
+        `;
+      }
+    });
+
     // Handle resize
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
@@ -207,7 +242,17 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
       <h2 className="text-2xl font-bold text-gray-900 mb-4">Price Chart & Technical Indicators</h2>
 
       {/* Candlestick Chart */}
-      <div className="mb-6" ref={chartContainerRef} style={{ width: '100%', height: '400px' }} />
+      {/* Candlestick Chart with Legend */}
+      <div className="mb-6 relative" style={{ width: '100%', height: '400px' }}>
+        <div ref={chartContainerRef} className="w-full h-full" />
+        <div
+          ref={legendRef}
+          className="absolute top-3 left-3 z-[100] font-mono text-sm pointer-events-none p-2 rounded bg-white/80 border border-gray-200 shadow-sm"
+          style={{ display: 'none' }}
+        >
+          {/* Content will be injected here */}
+        </div>
+      </div>
 
       {/* Indicators Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
