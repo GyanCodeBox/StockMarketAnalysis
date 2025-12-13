@@ -175,50 +175,112 @@ class KiteService:
                     logger.warning(f"Error fetching OHLC from Kite: {e}. Falling back to mock data.")
                 # Fall through to mock data instead of raising
         
+        
         # Mock data for development/testing
-        return self._get_mock_ohlc(symbol, exchange, days)
+        result = self._get_mock_ohlc(symbol, exchange, days)
+        
+        # Apply resampling to mock data if needed
+        if interval == "week" and result.get("data"):
+            result["data"] = self._resample_to_weekly(result["data"])
+            
+        result["interval"] = interval
+        return result
 
     def _resample_to_weekly(self, daily_data: list) -> list:
-        """Resample daily OHLC data to weekly"""
+        """Resample daily OHLC data to weekly (Pure Python)"""
         if not daily_data:
             return []
             
-        import pandas as pd
-        
         try:
-            df = pd.DataFrame(daily_data)
-            df['date'] = pd.to_datetime(df['date'])
-            df.set_index('date', inplace=True)
+            # Sort data by date just in case
+            daily_data.sort(key=lambda x: x['date'])
             
-            # Resample strictly to weekly (W-FRI for Friday ending)
-            # Logic: Open=first open, Close=last close, High=max high, Low=min low, Volume=sum
-            weekly_df = df.resample('W-FRI').agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum'
-            }).dropna()
+            resampled = []
+            current_week_data = []
             
-            # Reset index to make date a column again
-            weekly_df.reset_index(inplace=True)
+            from datetime import datetime, timedelta
             
-            # Convert back to list of dicts
-            # Need to ensure date format matches Kite (datetime with timezone or ISO string)
-            # Here we just keep what pandas gave but convert to ISO string for JSON serialization later if needed
-            result = []
-            for _, row in weekly_df.iterrows():
-                item = row.to_dict()
-                item['date'] = row['date'].isoformat()
-                result.append(item)
+            def get_week_start(date_str):
+                # ISO format to datetime
+                try:
+                    dt = datetime.fromisoformat(date_str)
+                except:
+                    # Handle Z suffix or other formats if needed, but assuming ISO from kite/mock
+                    dt = datetime.strptime(date_str.split('T')[0], "%Y-%m-%d")
+                    
+                # Get Monday of the week
+                return dt - timedelta(days=dt.weekday())
+
+            current_week_start = None
+            
+            for candle in daily_data:
+                candle_date = candle['date']
+                date_obj = None
+                if isinstance(candle_date, str):
+                    try:
+                        date_obj = datetime.fromisoformat(candle_date)
+                    except:
+                         try:
+                             date_obj = datetime.strptime(candle_date.split('T')[0], "%Y-%m-%d")
+                         except:
+                             continue # Skip invalid dates
+                elif isinstance(candle_date, datetime):
+                    date_obj = candle_date
+                else:
+                    continue
+
+                # Simply group by ISO calendar week (year, week_num)
+                iso_year, iso_week, _ = date_obj.isocalendar()
+                week_key = (iso_year, iso_week)
                 
-            return result
-        except ImportError:
-            logger.warning("Pandas not installed. Skipping resampling (returning daily).")
-            return daily_data
+                if current_week_start != week_key:
+                    if current_week_data:
+                        # Process previous week
+                        resampled.append(self._aggregate_week(current_week_data))
+                    
+                    current_week_start = week_key
+                    current_week_data = []
+                
+                current_week_data.append(candle)
+            
+            # Process last week
+            if current_week_data:
+                resampled.append(self._aggregate_week(current_week_data))
+                
+            return resampled
+            
         except Exception as e:
             logger.error(f"Resampling error: {e}")
             return daily_data
+
+    def _aggregate_week(self, week_data: list) -> dict:
+        """Helper to aggregate a list of daily candles into one weekly candle"""
+        if not week_data:
+            return {}
+            
+        first = week_data[0]
+        last = week_data[-1]
+        
+        # Determine date: use the last candle's date
+        last_date = last["date"]
+        date_str = ""
+        if isinstance(last_date, datetime):
+            date_str = last_date.isoformat()
+        else:
+            date_str = str(last_date)
+
+        high = max(d.get('high', 0) for d in week_data)
+        low = min(d.get('low', float('inf')) for d in week_data)
+        volume = sum(d.get('volume', 0) for d in week_data)
+        
+        return {
+            "date": date_str,
+            "open": first.get("open", 0),
+            "high": high,
+            "low": low,
+            "close": last.get("close", 0),
+            "volume": volume
+        }
     
     def _get_instrument_token(self, symbol: str, exchange: str) -> Optional[int]:
         """

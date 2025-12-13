@@ -71,17 +71,31 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
     const chartData = []
     const volumeData = []
 
+    const interval = ohlcData.interval || 'day'
+
     data.forEach(item => {
-      // Handle different date formats
+      // Handle different date formats based on interval
       let time
       const dateVal = item.date
-      if (dateVal instanceof Date) {
-        time = Math.floor(dateVal.getTime() / 1000) // Convert to Unix timestamp
-      } else if (typeof dateVal === 'string') {
-        time = Math.floor(new Date(dateVal).getTime() / 1000)
+
+      if (interval === 'hour') {
+        // For hourly, use Unix timestamp
+        if (dateVal instanceof Date) {
+          time = Math.floor(dateVal.getTime() / 1000)
+        } else if (typeof dateVal === 'string') {
+          time = Math.floor(new Date(dateVal).getTime() / 1000)
+        }
       } else {
-        return
+        // For daily/weekly, use YYYY-MM-DD string to avoid timezone issues/gaps
+        if (typeof dateVal === 'string') {
+          // Assuming ISO string like "2023-01-01T..."
+          time = dateVal.split('T')[0]
+        } else if (dateVal instanceof Date) {
+          time = dateVal.toISOString().split('T')[0]
+        }
       }
+
+      if (!time) return
 
       const open = parseFloat(item.open || item.Open || 0)
       const close = parseFloat(item.close || item.Close || 0)
@@ -104,8 +118,15 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
       })
     })
 
-    const cleanChartData = chartData.filter(item => item !== null && item.time).sort((a, b) => a.time - b.time)
-    const cleanVolumeData = volumeData.filter(item => item !== null && item.time).sort((a, b) => a.time - b.time)
+    const sortData = (a, b) => {
+      if (typeof a.time === 'string' && typeof b.time === 'string') {
+        return a.time.localeCompare(b.time)
+      }
+      return a.time - b.time
+    }
+
+    const cleanChartData = chartData.filter(item => item !== null && item.time).sort(sortData)
+    const cleanVolumeData = volumeData.filter(item => item !== null && item.time).sort(sortData)
 
     if (cleanChartData.length > 0) {
       candlestickSeries.setData(cleanChartData)
@@ -240,8 +261,8 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
             <div className="flex justify-between">
               <span className="text-gray-600">Price Trend:</span>
               <span className={`font-semibold ${indicators.price_trend === 'bullish' ? 'text-green-600' :
-                  indicators.price_trend === 'bearish' ? 'text-red-600' :
-                    'text-gray-600'
+                indicators.price_trend === 'bearish' ? 'text-red-600' :
+                  'text-gray-600'
                 }`}>
                 {indicators.price_trend?.toUpperCase() || 'N/A'}
               </span>
@@ -259,8 +280,8 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
             <div className="flex justify-between">
               <span className="text-gray-600">Volume Trend:</span>
               <span className={`font-semibold ${indicators.volume_analysis?.volume_trend === 'increasing' ? 'text-green-600' :
-                  indicators.volume_analysis?.volume_trend === 'decreasing' ? 'text-red-600' :
-                    'text-gray-600'
+                indicators.volume_analysis?.volume_trend === 'decreasing' ? 'text-red-600' :
+                  'text-gray-600'
                 }`}>
                 {indicators.volume_analysis?.volume_trend?.toUpperCase() || 'N/A'}
               </span>
