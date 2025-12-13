@@ -10,7 +10,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const handleAnalyze = async (symbol, exchange) => {
+  const handleAnalyze = async (symbol, exchange, timeframe = 'day') => {
     setLoading(true)
     setError(null)
     setAnalysisData(null)
@@ -21,7 +21,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ symbol, exchange }),
+        body: JSON.stringify({ symbol, exchange, timeframe }),
       })
 
       if (!response.ok) {

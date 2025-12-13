@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 function StockInput({ onAnalyze, loading }) {
   const [symbol, setSymbol] = useState('')
   const [exchange, setExchange] = useState('NSE')
+  const [timeframe, setTimeframe] = useState('day')
   const [suggestions, setSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const wrapperRef = useRef(null)
@@ -63,7 +64,7 @@ function StockInput({ onAnalyze, loading }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (symbol.trim()) {
-      onAnalyze(symbol.trim().toUpperCase(), exchange)
+      onAnalyze(symbol.trim().toUpperCase(), exchange, timeframe)
       setShowSuggestions(false)
     }
   }
@@ -71,7 +72,8 @@ function StockInput({ onAnalyze, loading }) {
   const handleSuggestionClick = (suggestion) => {
     setSymbol(suggestion.symbol)
     setExchange(suggestion.exchange)
-    onAnalyze(suggestion.symbol, suggestion.exchange)
+    // Keep current timeframe
+    onAnalyze(suggestion.symbol, suggestion.exchange, timeframe)
     setShowSuggestions(false)
   }
 
@@ -140,6 +142,23 @@ function StockInput({ onAnalyze, loading }) {
           >
             <option value="NSE">NSE</option>
             <option value="BSE">BSE</option>
+          </select>
+        </div>
+
+        <div className="md:w-32">
+          <label htmlFor="timeframe" className="block text-sm font-medium text-gray-700 mb-2">
+            Timeframe
+          </label>
+          <select
+            id="timeframe"
+            value={timeframe}
+            onChange={(e) => setTimeframe(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            disabled={loading}
+          >
+            <option value="day">Daily</option>
+            <option value="week">Weekly</option>
+            <option value="hour">Hourly</option>
           </select>
         </div>
 

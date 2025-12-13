@@ -31,14 +31,26 @@ def fetch_stock_data_node(state: AgentState) -> AgentState:
     try:
         symbol = state["symbol"]
         exchange = state["exchange"]
+        timeframe = state.get("timeframe", "day")
         
-        logger.info(f"Fetching stock data for {symbol} on {exchange}")
+        logger.info(f"Fetching stock data for {symbol} on {exchange} ({timeframe})")
+        
+        # Determine duration and interval based on timeframe
+        days = 365 # Default 1 year for daily
+        interval = "day"
+        
+        if timeframe == "week":
+            days = 1095 # ~3 years
+            interval = "week"
+        elif timeframe == "hour":
+            days = 60 # Recent history
+            interval = "hour"
         
         # Fetch quote (current price) - will use mock data if API fails
         quote = kite_service.get_quote(symbol, exchange)
         
         # Fetch OHLC data (historical) - will use mock data if API fails
-        ohlc_data = kite_service.get_ohlc(symbol, exchange, days=180)
+        ohlc_data = kite_service.get_ohlc(symbol, exchange, days=days, interval=interval)
         
         # Verify we got valid data (both methods return mock data if API fails, so this should always succeed)
         if not quote or not ohlc_data:

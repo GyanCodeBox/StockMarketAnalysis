@@ -8,6 +8,7 @@ class AgentState(TypedDict):
     """State passed between agent nodes"""
     symbol: str
     exchange: str
+    timeframe: str
     quote: Optional[Dict[str, Any]]
     ohlc_data: Optional[Dict[str, Any]]
     indicators: Optional[Dict[str, Any]]

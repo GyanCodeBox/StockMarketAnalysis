@@ -12,6 +12,7 @@ router = APIRouter()
 class AnalyzeRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol to analyze (e.g., 'RELIANCE', 'TCS')")
     exchange: Optional[str] = Field(default="NSE", description="Exchange code (NSE, BSE)")
+    timeframe: Optional[str] = Field(default="day", description="Timeframe: 'day', 'week', 'hour'")
 
 
 class AnalyzeResponse(BaseModel):
@@ -49,7 +50,8 @@ async def analyze_stock(request: AnalyzeRequest):
         # Run the agent with initial state
         result = agent.invoke({
             "symbol": symbol,
-            "exchange": exchange
+            "exchange": exchange,
+            "timeframe": request.timeframe or "day"
         })
         
         # Check if analysis was successful

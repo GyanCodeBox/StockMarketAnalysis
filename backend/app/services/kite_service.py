@@ -106,7 +106,7 @@ class KiteService:
         # Mock data for development/testing
         return self._get_mock_quote(symbol, exchange)
     
-    def get_ohlc(self, symbol: str, exchange: str = "NSE", days: int = 30) -> Dict[str, Any]:
+    def get_ohlc(self, symbol: str, exchange: str = "NSE", days: int = 30, interval: str = "day") -> Dict[str, Any]:
         """
         Get historical OHLC data
         
@@ -114,6 +114,7 @@ class KiteService:
             symbol: Stock symbol
             exchange: Exchange code
             days: Number of days of historical data
+            interval: Data interval ('day', 'week', 'hour')
             
         Returns:
             Dictionary with OHLC data
@@ -122,6 +123,12 @@ class KiteService:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
         
+        kite_interval = "day"
+        if interval == "hour":
+            kite_interval = "60minute"  # Kite 60min interval
+        elif interval == "week":
+            kite_interval = "day"  # We fetch daily and resample
+            
         if self.kite:
             try:
                 # Get instrument token - if None, we'll use instrument string instead
@@ -138,17 +145,24 @@ class KiteService:
                         instrument_token=instrument_token,
                         from_date=from_date,
                         to_date=to_date,
-                        interval="day"
+                        interval=kite_interval
                     )
                     
                     if historical_data:
+                        # Resample to weekly if requested
+                        if interval == "week":
+                            historical_data = self._resample_to_weekly(historical_data)
+                            
                         return {
                             "symbol": symbol,
                             "exchange": exchange,
                             "data": historical_data,
                             "from_date": from_date.isoformat(),
-                            "to_date": to_date.isoformat()
+                            "to_date": to_date.isoformat(),
+                            "interval": interval
                         }
+                    
+
             except Exception as e:
                 error_msg = str(e).lower()
                 # Check for authentication/token errors
@@ -163,6 +177,48 @@ class KiteService:
         
         # Mock data for development/testing
         return self._get_mock_ohlc(symbol, exchange, days)
+
+    def _resample_to_weekly(self, daily_data: list) -> list:
+        """Resample daily OHLC data to weekly"""
+        if not daily_data:
+            return []
+            
+        import pandas as pd
+        
+        try:
+            df = pd.DataFrame(daily_data)
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+            
+            # Resample strictly to weekly (W-FRI for Friday ending)
+            # Logic: Open=first open, Close=last close, High=max high, Low=min low, Volume=sum
+            weekly_df = df.resample('W-FRI').agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            }).dropna()
+            
+            # Reset index to make date a column again
+            weekly_df.reset_index(inplace=True)
+            
+            # Convert back to list of dicts
+            # Need to ensure date format matches Kite (datetime with timezone or ISO string)
+            # Here we just keep what pandas gave but convert to ISO string for JSON serialization later if needed
+            result = []
+            for _, row in weekly_df.iterrows():
+                item = row.to_dict()
+                item['date'] = row['date'].isoformat()
+                result.append(item)
+                
+            return result
+        except ImportError:
+            logger.warning("Pandas not installed. Skipping resampling (returning daily).")
+            return daily_data
+        except Exception as e:
+            logger.error(f"Resampling error: {e}")
+            return daily_data
     
     def _get_instrument_token(self, symbol: str, exchange: str) -> Optional[int]:
         """
