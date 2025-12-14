@@ -11,33 +11,36 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
     if (!chartContainerRef.current || !ohlcData?.data) return
 
     // Create chart
-    // Create chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#ffffff' },
-        textColor: '#333',
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: '#94a3b8', // slate-400
       },
       width: chartContainerRef.current.clientWidth,
       height: 400,
       grid: {
-        vertLines: { color: '#e0e0e0' },
-        horzLines: { color: '#e0e0e0' },
+        vertLines: { color: '#334155' }, // slate-700
+        horzLines: { color: '#334155' },
       },
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+        borderColor: '#475569',
       },
+      rightPriceScale: {
+        borderColor: '#475569',
+      }
     })
 
     chartRef.current = chart
 
     // Add candlestick series
     const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#26a69a',
-      downColor: '#ef5350',
+      upColor: '#10b981', // emerald-500
+      downColor: '#f43f5e', // rose-500
       borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
+      wickUpColor: '#10b981',
+      wickDownColor: '#f43f5e',
     })
 
     candlestickSeriesRef.current = candlestickSeries
@@ -110,7 +113,7 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
       })
 
       // Volume color based on price change
-      const color = close >= open ? '#26a69a' : '#ef5350'
+      const color = close >= open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(244, 63, 94, 0.5)' // emerald/rose with opacity
 
       volumeData.push({
         time: time,
@@ -151,7 +154,7 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
       }
 
       const sma20Series = chart.addLineSeries({
-        color: '#10b981',
+        color: '#3b82f6', // blue-500
         lineWidth: 2,
         title: 'SMA 20',
       })
@@ -171,7 +174,7 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
       }
 
       const sma50Series = chart.addLineSeries({
-        color: '#f59e0b',
+        color: '#f59e0b', // amber-500
         lineWidth: 2,
         title: 'SMA 50',
       })
@@ -199,7 +202,7 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
 
       if (ohlc) {
         const { open, high, low, close } = ohlc;
-        const color = close >= open ? 'text-green-600' : 'text-red-600';
+        const color = close >= open ? 'text-emerald-400' : 'text-rose-400';
 
         legendRef.current.innerHTML = `
           <div class="flex gap-4">
@@ -238,16 +241,20 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
   const resistanceLevels = indicators.resistance_levels || []
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">Price Chart & Technical Indicators</h2>
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl shadow-xl p-6 backdrop-blur-sm">
+      <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+        </svg>
+        Technical Analysis
+      </h2>
 
-      {/* Candlestick Chart */}
       {/* Candlestick Chart with Legend */}
-      <div className="mb-6 relative" style={{ width: '100%', height: '400px' }}>
+      <div className="mb-8 relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950" style={{ width: '100%', height: '400px' }}>
         <div ref={chartContainerRef} className="w-full h-full" />
         <div
           ref={legendRef}
-          className="absolute top-3 left-3 z-[100] font-mono text-sm pointer-events-none p-2 rounded bg-white/80 border border-gray-200 shadow-sm"
+          className="absolute top-3 left-3 z-[20] font-mono text-xs pointer-events-none p-2 rounded bg-slate-900/90 border border-slate-700 text-slate-300 shadow-xl"
           style={{ display: 'none' }}
         >
           {/* Content will be injected here */}
@@ -256,42 +263,42 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
 
       {/* Indicators Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Moving Averages</h3>
-          <div className="space-y-1 text-sm">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-5">
+          <h3 className="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">Moving Averages</h3>
+          <div className="space-y-1 text-sm font-mono">
             <div className="flex justify-between">
-              <span className="text-gray-600">20-day SMA:</span>
-              <span className="font-semibold">₹{indicators.sma_20?.toFixed(2) || 'N/A'}</span>
+              <span className="text-slate-500">20-day SMA:</span>
+              <span className="font-bold text-blue-400">₹{indicators.sma_20?.toFixed(2) || 'N/A'}</span>
             </div>
             {indicators.sma_50 && (
               <div className="flex justify-between">
-                <span className="text-gray-600">50-day SMA:</span>
-                <span className="font-semibold">₹{indicators.sma_50.toFixed(2)}</span>
+                <span className="text-slate-500">50-day SMA:</span>
+                <span className="font-bold text-amber-500">₹{indicators.sma_50.toFixed(2)}</span>
               </div>
             )}
             {indicators.sma_200 && (
               <div className="flex justify-between">
-                <span className="text-gray-600">200-day SMA:</span>
-                <span className="font-semibold">₹{indicators.sma_200.toFixed(2)}</span>
+                <span className="text-slate-500">200-day SMA:</span>
+                <span className="font-bold text-purple-400">₹{indicators.sma_200.toFixed(2)}</span>
               </div>
             )}
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Price Levels</h3>
-          <div className="space-y-2 text-sm">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-5">
+          <h3 className="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">Price Levels</h3>
+          <div className="space-y-3 text-sm font-mono">
             <div>
-              <p className="text-gray-600 mb-1">Support Levels:</p>
-              <p className="font-semibold text-green-600">
+              <p className="text-slate-500 mb-1">Support Levels:</p>
+              <p className="font-semibold text-emerald-500">
                 {supportLevels.length > 0
                   ? supportLevels.map(level => `₹${level.toFixed(2)}`).join(', ')
                   : 'N/A'}
               </p>
             </div>
             <div>
-              <p className="text-gray-600 mb-1">Resistance Levels:</p>
-              <p className="font-semibold text-red-600">
+              <p className="text-slate-500 mb-1">Resistance Levels:</p>
+              <p className="font-semibold text-rose-500">
                 {resistanceLevels.length > 0
                   ? resistanceLevels.map(level => `₹${level.toFixed(2)}`).join(', ')
                   : 'N/A'}
@@ -300,40 +307,40 @@ function StockChart({ symbol, quote, ohlcData, indicators }) {
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Trend Analysis</h3>
-          <div className="space-y-1 text-sm">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-5">
+          <h3 className="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">Trend Analysis</h3>
+          <div className="space-y-1 text-sm font-mono">
             <div className="flex justify-between">
-              <span className="text-gray-600">Price Trend:</span>
-              <span className={`font-semibold ${indicators.price_trend === 'bullish' ? 'text-green-600' :
-                indicators.price_trend === 'bearish' ? 'text-red-600' :
-                  'text-gray-600'
+              <span className="text-slate-500">Price Trend:</span>
+              <span className={`font-bold ${indicators.price_trend === 'bullish' ? 'text-emerald-400' :
+                indicators.price_trend === 'bearish' ? 'text-rose-400' :
+                  'text-slate-400'
                 }`}>
                 {indicators.price_trend?.toUpperCase() || 'N/A'}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Volatility:</span>
-              <span className="font-semibold">{indicators.volatility?.toFixed(2) || 'N/A'}%</span>
+              <span className="text-slate-500">Volatility:</span>
+              <span className="font-bold text-slate-200">{indicators.volatility?.toFixed(2) || 'N/A'}%</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Volume Analysis</h3>
-          <div className="space-y-1 text-sm">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-5">
+          <h3 className="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">Volume Analysis</h3>
+          <div className="space-y-1 text-sm font-mono">
             <div className="flex justify-between">
-              <span className="text-gray-600">Volume Trend:</span>
-              <span className={`font-semibold ${indicators.volume_analysis?.volume_trend === 'increasing' ? 'text-green-600' :
-                indicators.volume_analysis?.volume_trend === 'decreasing' ? 'text-red-600' :
-                  'text-gray-600'
+              <span className="text-slate-500">Volume Trend:</span>
+              <span className={`font-bold ${indicators.volume_analysis?.volume_trend === 'increasing' ? 'text-emerald-400' :
+                indicators.volume_analysis?.volume_trend === 'decreasing' ? 'text-rose-400' :
+                  'text-slate-400'
                 }`}>
                 {indicators.volume_analysis?.volume_trend?.toUpperCase() || 'N/A'}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Avg Volume:</span>
-              <span className="font-semibold">
+              <span className="text-slate-500">Avg Volume:</span>
+              <span className="font-bold text-slate-200">
                 {indicators.volume_analysis?.average_volume?.toLocaleString('en-IN') || 'N/A'}
               </span>
             </div>
