@@ -21,6 +21,7 @@ class AnalyzeResponse(BaseModel):
     quote: dict
     ohlc_data: Optional[dict] = None  # Historical OHLC data for charting
     indicators: dict
+    fundamental_data: Optional[dict] = None # Fundamental analysis data
     analysis: str
     status: str
 
@@ -67,6 +68,7 @@ async def analyze_stock(request: AnalyzeRequest):
             quote=result.get("quote", {}),
             ohlc_data=result.get("ohlc_data", {}),
             indicators=result.get("indicators", {}),
+            fundamental_data=result.get("fundamental_data"),
             analysis=result.get("analysis", ""),
             status=result.get("status", "completed")
         )

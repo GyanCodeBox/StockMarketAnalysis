@@ -3,12 +3,14 @@ import StockInput from './components/StockInput'
 import StockInfo from './components/StockInfo'
 import StockChart from './components/StockChart'
 import AIAnalysisDisplay from './components/AIAnalysisDisplay'
+import FundamentalAnalysis from './components/FundamentalAnalysis'
 import './index.css'
 
 function App() {
   const [analysisData, setAnalysisData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [activeTab, setActiveTab] = useState('technical') // 'technical' or 'fundamental'
 
   const handleAnalyze = async (symbol, exchange, timeframe = 'day') => {
     setLoading(true)
@@ -71,19 +73,60 @@ function App() {
             {/* Stock Info */}
             <StockInfo quote={analysisData.quote} symbol={analysisData.symbol} />
 
-            {/* Chart */}
-            {analysisData.indicators && (
-              <StockChart
-                symbol={analysisData.symbol}
-                quote={analysisData.quote}
-                ohlcData={analysisData.ohlc_data}
-                indicators={analysisData.indicators}
-              />
-            )}
+            {/* Tab Navigation */}
+            <div className="flex space-x-4 mb-6">
+              <button
+                onClick={() => setActiveTab('technical')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'technical'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+              >
+                Technical Analysis
+              </button>
+              <button
+                onClick={() => setActiveTab('fundamental')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'fundamental'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+              >
+                Fundamental Analysis
+              </button>
+            </div>
 
-            {/* AI Analysis */}
-            {analysisData.analysis && (
-              <AIAnalysisDisplay analysis={analysisData.analysis} />
+            {/* Content Views */}
+            {activeTab === 'technical' ? (
+              <div className="space-y-6 animate-fade-in-up">
+                {/* Chart */}
+                {analysisData.indicators && (
+                  <StockChart
+                    symbol={analysisData.symbol}
+                    quote={analysisData.quote}
+                    ohlcData={analysisData.ohlc_data}
+                    indicators={analysisData.indicators}
+                  />
+                )}
+
+                {/* AI Analysis */}
+                {analysisData.analysis && (
+                  <AIAnalysisDisplay analysis={analysisData.analysis} />
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6 animate-fade-in-up">
+                <FundamentalAnalysis data={analysisData.fundamental_data} />
+
+                {/* Also show AI Analysis in Fundamental view if relevant, or keep it shared? 
+                     The AI Analysis is "Combined", so it fits both. Let's show it here too or move out of tabs.
+                     For now, I'll show it in both or just let FundamentalAnalysis handle its own view. 
+                     Fundamental component is rich enough. I will add AI Analysis at bottom of Fundamental too if requested.
+                     But let's stick to just the component I built.
+                  */}
+                {analysisData.analysis && (
+                  <AIAnalysisDisplay analysis={analysisData.analysis} />
+                )}
+              </div>
             )}
           </div>
         )}

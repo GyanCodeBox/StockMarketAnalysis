@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     quote: Optional[Dict[str, Any]]
     ohlc_data: Optional[Dict[str, Any]]
     indicators: Optional[Dict[str, Any]]
+    fundamental_data: Optional[Dict[str, Any]]
     analysis: Optional[str]
     status: str
     error: Optional[str]

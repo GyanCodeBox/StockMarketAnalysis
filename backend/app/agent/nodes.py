@@ -4,6 +4,7 @@ LangGraph agent nodes - individual steps in the state machine
 from app.agent.state import AgentState
 from app.services.kite_service import KiteService
 from app.services.technical_tool import TechnicalTool
+from app.tools.fundamental_tool import FundamentalTool
 from app.services.llm_service import LLMService
 import logging
 
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 # Initialize services
 kite_service = KiteService()
 technical_tool = TechnicalTool()
+fundamental_tool = FundamentalTool()
 llm_service = LLMService()
 
 
@@ -127,6 +129,36 @@ def calc_indicators_node(state: AgentState) -> AgentState:
     return state
 
 
+
+def fundamental_analysis_node(state: AgentState) -> AgentState:
+    """
+    Perform fundamental analysis
+    """
+    try:
+        if state.get("status") == "error":
+            return state
+            
+        symbol = state["symbol"]
+        exchange = state["exchange"]
+        
+        logger.info(f"Running fundamental analysis for {symbol}")
+        
+        # Run analysis tool
+        fund_data = fundamental_tool.analyze_stock(symbol, exchange)
+        
+        state["fundamental_data"] = fund_data
+        state["status"] = "fundamental_analysis_completed"
+        
+        logger.info(f"Successfully processed fundamental data for {symbol}")
+        
+    except Exception as e:
+        logger.error(f"Error in fundamental analysis: {str(e)}")
+        # We don't fail the whole pipeline if fundamental fails, just log it
+        state["fundamental_data"] = None
+        
+    return state
+
+
 def generate_analysis_node(state: AgentState) -> AgentState:
     """
     Generate AI analysis using LLM
@@ -138,6 +170,7 @@ def generate_analysis_node(state: AgentState) -> AgentState:
         symbol = state["symbol"]
         quote = state.get("quote", {})
         indicators = state.get("indicators", {})
+        fundamental_data = state.get("fundamental_data")
         
         logger.info(f"Generating AI analysis for {symbol}")
         
@@ -145,7 +178,8 @@ def generate_analysis_node(state: AgentState) -> AgentState:
         analysis = llm_service.generate_analysis(
             symbol=symbol,
             quote=quote,
-            indicators=indicators
+            indicators=indicators,
+            fundamental_data=fundamental_data
         )
         
         state["analysis"] = analysis

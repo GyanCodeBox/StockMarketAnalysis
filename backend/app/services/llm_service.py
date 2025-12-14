@@ -66,7 +66,8 @@ class LLMService:
         self,
         symbol: str,
         quote: Dict[str, Any],
-        indicators: Dict[str, Any]
+        indicators: Dict[str, Any],
+        fundamental_data: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Generate AI-powered stock analysis
@@ -80,7 +81,7 @@ class LLMService:
             Plain-language analysis text
         """
         # Prepare prompt
-        prompt = self._build_analysis_prompt(symbol, quote, indicators)
+        prompt = self._build_analysis_prompt(symbol, quote, indicators, fundamental_data)
         
         # Try OpenAI first, then Anthropic, then mock
         if self.openai_client:
@@ -96,13 +97,14 @@ class LLMService:
                 logger.error(f"Anthropic generation failed: {e}")
         
         # Fallback to mock analysis
-        return self._generate_mock_analysis(symbol, quote, indicators)
+        return self._generate_mock_analysis(symbol, quote, indicators, fundamental_data)
     
     def _build_analysis_prompt(
         self,
         symbol: str,
         quote: Dict[str, Any],
-        indicators: Dict[str, Any]
+        indicators: Dict[str, Any],
+        fundamental_data: Optional[Dict[str, Any]] = None
     ) -> str:
         """Build the prompt for LLM analysis"""
         vol_analysis = indicators.get('volume_analysis', {})
@@ -115,34 +117,43 @@ class LLMService:
         if current_vol == 0:
             vol_display += " (Market likely closed or data unavailable)"
 
-        prompt = f"""Analyze the following stock data and provide a clear, concise technical analysis in plain language.
+        fundamental_section = ""
+        if fundamental_data:
+            financials = fundamental_data.get("financials", {})
+            cagr = financials.get("cagr", {})
+            yearly = financials.get("yearly", [])
+            latest_year = yearly[0] if yearly else {}
+            
+            fundamental_section = f"""
+Fundamental Analysis:
+- EPS 5-Year CAGR: {cagr.get('eps_5y', 'N/A')}%
+- Sales 5-Year CAGR: {cagr.get('sales_5y', 'N/A')}%
+- Latest Annual EPS Growth: {latest_year.get('eps_growth', 'N/A'):.2f}%
+- Shareholding: Promoter {fundamental_data.get('ownership', [{}])[0].get('percentHeld', 'N/A')}% (approx)
+"""
+
+        prompt = f"""Analyze the following stock data and provide a clear, concise combined technical and fundamental analysis in plain language.
 
 Stock Symbol: {symbol}
 Current Price: ₹{quote.get('last_price', 'N/A')}
 Change: {quote.get('change', 0):.2f} ({quote.get('change_percent', 0):.2f}%)
-Open: ₹{quote.get('open', 'N/A')}
-High: ₹{quote.get('high', 'N/A')}
-Low: ₹{quote.get('low', 'N/A')}
 Volume: {vol_display}
 
 Technical Indicators:
-- 20-day SMA: ₹{indicators.get('sma_20', 'N/A')}
-- 50-day SMA: ₹{indicators.get('sma_50', 'N/A') if indicators.get('sma_50') else 'N/A'}
 - Price Trend: {indicators.get('price_trend', 'N/A')}
-- Support Levels: ₹{', ₹'.join(map(str, indicators.get('support_levels', [])))}
-- Resistance Levels: ₹{', ₹'.join(map(str, indicators.get('resistance_levels', [])))}
-- Average Volume (20d): {avg_vol}
-- Volume Trend: {vol_analysis.get('volume_trend', 'N/A')}
-- Volatility: {indicators.get('volatility', 'N/A')}%
+- 20-day SMA: ₹{indicators.get('sma_20', 'N/A')}
+- Support: ₹{', ₹'.join(map(str, indicators.get('support_levels', [])))}
+- Resistance: ₹{', ₹'.join(map(str, indicators.get('resistance_levels', [])))}
+{fundamental_section}
 
 Please provide:
-1. A brief overview of the current price action
-2. Key technical observations (support/resistance, moving averages, trend)
-3. Volume analysis (Compare current volume to average volume if available. If current volume is 0, focus on the volume trend and average volume)
-4. Overall assessment (bullish/bearish/neutral)
-5. Key levels to watch
+1. A brief overview of the current price action and trend.
+2. Fundamental Strength: Comment on growth (CAGR) and recent performance if available.
+3. Technical Outlook: Support/resistance and moving averages.
+4. Overall assessment (bullish/bearish/neutral) considering BOTH technicals and fundamentals.
+5. Key levels to watch.
 
-Keep the analysis concise (3-4 paragraphs) and use plain language that's easy to understand."""
+Keep the analysis concise (3-4 paragraphs), use plain language, and format with Markdown headers."""
         
         return prompt
     
@@ -177,7 +188,8 @@ Keep the analysis concise (3-4 paragraphs) and use plain language that's easy to
         self,
         symbol: str,
         quote: Dict[str, Any],
-        indicators: Dict[str, Any]
+        indicators: Dict[str, Any],
+        fundamental_data: Optional[Dict[str, Any]] = None
     ) -> str:
         """Generate mock analysis for testing when LLM APIs are not available"""
         current_price = quote.get("last_price", 0)
@@ -185,23 +197,28 @@ Keep the analysis concise (3-4 paragraphs) and use plain language that's easy to
         trend = indicators.get("price_trend", "neutral")
         change_percent = quote.get("change_percent", 0)
         
+        fund_text = ""
+        if fundamental_data:
+             cagr = fundamental_data.get("financials", {}).get("cagr", {})
+             fund_text = f"**Fundamental Insight:**\nThe company shows a 5-year EPS CAGR of {cagr.get('eps_5y', 'N/A')}%, indicating its long-term growth trajectory."
+
         analysis = f"""
-**Technical Analysis for {symbol}**
+**Combined Analysis for {symbol}**
 
 **Current Price Action:**
 {symbol} is currently trading at ₹{current_price:.2f}, showing a {'gain' if change_percent > 0 else 'loss'} of {abs(change_percent):.2f}% today. 
 
-**Technical Indicators:**
+**Technical Logic:**
 The stock is trading {'above' if current_price > sma_20 else 'below'} its 20-day Simple Moving Average (SMA) of ₹{sma_20:.2f}, indicating a {'bullish' if current_price > sma_20 else 'bearish'} short-term momentum. The overall trend appears to be {trend}.
 
-**Key Levels:**
-Support levels are identified at ₹{', ₹'.join(map(str, indicators.get('support_levels', ['N/A'])[:2]))}, while resistance levels are at ₹{', ₹'.join(map(str, indicators.get('resistance_levels', ['N/A'])[:2]))}. These levels should be monitored closely for potential breakouts or breakdowns.
+{fund_text}
 
-**Volume Analysis:**
-Trading volume shows a {indicators.get('volume_analysis', {}).get('volume_trend', 'neutral')} trend, which {'supports' if indicators.get('volume_analysis', {}).get('volume_trend') == 'increasing' else 'may not support'} the current price movement.
+**Key Levels:**
+Support levels: ₹{', ₹'.join(map(str, indicators.get('support_levels', ['N/A'])[:2]))}
+Resistance levels: ₹{', ₹'.join(map(str, indicators.get('resistance_levels', ['N/A'])[:2]))}
 
 **Overall Assessment:**
-Based on the technical indicators, {symbol} presents a {trend} outlook. Traders should watch for breaks above resistance or below support levels for confirmation of the trend direction.
+Technically {trend}, supported by fundamental growth metrics. Watch for reaction at key levels.
 """
         
         return analysis.strip()
