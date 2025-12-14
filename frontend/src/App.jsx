@@ -10,7 +10,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const handleAnalyze = async (symbol, exchange) => {
+  const handleAnalyze = async (symbol, exchange, timeframe = 'day') => {
     setLoading(true)
     setError(null)
     setAnalysisData(null)
@@ -21,7 +21,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ symbol, exchange }),
+        body: JSON.stringify({ symbol, exchange, timeframe }),
       })
 
       if (!response.ok) {
@@ -39,15 +39,16 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-200">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <header className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Agentic AI Stock Analysis
+        <header className="mb-10 text-center relative z-10">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-32 bg-indigo-500/20 rounded-full blur-[80px] -z-10"></div>
+          <h1 className="text-5xl font-black mb-2 tracking-tight bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 text-transparent bg-clip-text">
+            TERMINAL<span className="text-slate-500">.AI</span>
           </h1>
-          <p className="text-gray-600">
-            Intelligent stock analysis powered by LangGraph agents
+          <p className="text-slate-400 text-lg font-light tracking-wide">
+            Professional Grade Agentic Stock Analysis
           </p>
         </header>
 

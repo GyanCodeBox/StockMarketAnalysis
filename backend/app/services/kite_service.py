@@ -106,7 +106,7 @@ class KiteService:
         # Mock data for development/testing
         return self._get_mock_quote(symbol, exchange)
     
-    def get_ohlc(self, symbol: str, exchange: str = "NSE", days: int = 30) -> Dict[str, Any]:
+    def get_ohlc(self, symbol: str, exchange: str = "NSE", days: int = 30, interval: str = "day") -> Dict[str, Any]:
         """
         Get historical OHLC data
         
@@ -114,6 +114,7 @@ class KiteService:
             symbol: Stock symbol
             exchange: Exchange code
             days: Number of days of historical data
+            interval: Data interval ('day', 'week', 'hour')
             
         Returns:
             Dictionary with OHLC data
@@ -122,6 +123,12 @@ class KiteService:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
         
+        kite_interval = "day"
+        if interval == "hour":
+            kite_interval = "60minute"  # Kite 60min interval
+        elif interval == "week":
+            kite_interval = "day"  # We fetch daily and resample
+            
         if self.kite:
             try:
                 # Get instrument token - if None, we'll use instrument string instead
@@ -138,17 +145,24 @@ class KiteService:
                         instrument_token=instrument_token,
                         from_date=from_date,
                         to_date=to_date,
-                        interval="day"
+                        interval=kite_interval
                     )
                     
                     if historical_data:
+                        # Resample to weekly if requested
+                        if interval == "week":
+                            historical_data = self._resample_to_weekly(historical_data)
+                            
                         return {
                             "symbol": symbol,
                             "exchange": exchange,
                             "data": historical_data,
                             "from_date": from_date.isoformat(),
-                            "to_date": to_date.isoformat()
+                            "to_date": to_date.isoformat(),
+                            "interval": interval
                         }
+                    
+
             except Exception as e:
                 error_msg = str(e).lower()
                 # Check for authentication/token errors
@@ -161,8 +175,112 @@ class KiteService:
                     logger.warning(f"Error fetching OHLC from Kite: {e}. Falling back to mock data.")
                 # Fall through to mock data instead of raising
         
+        
         # Mock data for development/testing
-        return self._get_mock_ohlc(symbol, exchange, days)
+        result = self._get_mock_ohlc(symbol, exchange, days)
+        
+        # Apply resampling to mock data if needed
+        if interval == "week" and result.get("data"):
+            result["data"] = self._resample_to_weekly(result["data"])
+            
+        result["interval"] = interval
+        return result
+
+    def _resample_to_weekly(self, daily_data: list) -> list:
+        """Resample daily OHLC data to weekly (Pure Python)"""
+        if not daily_data:
+            return []
+            
+        try:
+            # Sort data by date just in case
+            daily_data.sort(key=lambda x: x['date'])
+            
+            resampled = []
+            current_week_data = []
+            
+            from datetime import datetime, timedelta
+            
+            def get_week_start(date_str):
+                # ISO format to datetime
+                try:
+                    dt = datetime.fromisoformat(date_str)
+                except:
+                    # Handle Z suffix or other formats if needed, but assuming ISO from kite/mock
+                    dt = datetime.strptime(date_str.split('T')[0], "%Y-%m-%d")
+                    
+                # Get Monday of the week
+                return dt - timedelta(days=dt.weekday())
+
+            current_week_start = None
+            
+            for candle in daily_data:
+                candle_date = candle['date']
+                date_obj = None
+                if isinstance(candle_date, str):
+                    try:
+                        date_obj = datetime.fromisoformat(candle_date)
+                    except:
+                         try:
+                             date_obj = datetime.strptime(candle_date.split('T')[0], "%Y-%m-%d")
+                         except:
+                             continue # Skip invalid dates
+                elif isinstance(candle_date, datetime):
+                    date_obj = candle_date
+                else:
+                    continue
+
+                # Simply group by ISO calendar week (year, week_num)
+                iso_year, iso_week, _ = date_obj.isocalendar()
+                week_key = (iso_year, iso_week)
+                
+                if current_week_start != week_key:
+                    if current_week_data:
+                        # Process previous week
+                        resampled.append(self._aggregate_week(current_week_data))
+                    
+                    current_week_start = week_key
+                    current_week_data = []
+                
+                current_week_data.append(candle)
+            
+            # Process last week
+            if current_week_data:
+                resampled.append(self._aggregate_week(current_week_data))
+                
+            return resampled
+            
+        except Exception as e:
+            logger.error(f"Resampling error: {e}")
+            return daily_data
+
+    def _aggregate_week(self, week_data: list) -> dict:
+        """Helper to aggregate a list of daily candles into one weekly candle"""
+        if not week_data:
+            return {}
+            
+        first = week_data[0]
+        last = week_data[-1]
+        
+        # Determine date: use the last candle's date
+        last_date = last["date"]
+        date_str = ""
+        if isinstance(last_date, datetime):
+            date_str = last_date.isoformat()
+        else:
+            date_str = str(last_date)
+
+        high = max(d.get('high', 0) for d in week_data)
+        low = min(d.get('low', float('inf')) for d in week_data)
+        volume = sum(d.get('volume', 0) for d in week_data)
+        
+        return {
+            "date": date_str,
+            "open": first.get("open", 0),
+            "high": high,
+            "low": low,
+            "close": last.get("close", 0),
+            "volume": volume
+        }
     
     def _get_instrument_token(self, symbol: str, exchange: str) -> Optional[int]:
         """
