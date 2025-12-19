@@ -1,9 +1,7 @@
-"""
-Financial Modeling Prep (FMP) API Service
-"""
 import os
-import requests
+import httpx
 import logging
+import asyncio
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -32,10 +30,9 @@ class FMPService:
         # Add more logic for other exchanges if needed
         return symbol
 
-    def get_income_statement(self, symbol: str, exchange: str = "NSE", limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_income_statement(self, symbol: str, exchange: str = "NSE", limit: int = 20) -> List[Dict[str, Any]]:
         """
-        Fetch quarterly income statement
-        Endpoint: /income-statement/{symbol}?period=quarter&limit={limit}
+        Fetch quarterly income statement (Async)
         """
         fmp_symbol = self._format_symbol(symbol, exchange)
         
@@ -47,25 +44,25 @@ class FMPService:
                 "apikey": self.api_key
             }
             try:
-                response = requests.get(url, params=params, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    if isinstance(data, list) and data:
-                        return data
-                    if isinstance(data, dict) and "Error Message" in data:
-                        logger.warning(f"FMP API Error: {data['Error Message']}")
-                else:
-                    logger.warning(f"FMP API Request failed: {response.status_code} - {response.text}")
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url, params=params, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if isinstance(data, list) and data:
+                            return data
+                        if isinstance(data, dict) and "Error Message" in data:
+                            logger.warning(f"FMP API Error: {data['Error Message']}")
+                    else:
+                        logger.warning(f"FMP API Request failed: {response.status_code} - {response.text}")
             except Exception as e:
                 logger.error(f"Error fetching income statement for {fmp_symbol}: {e}")
 
         logger.info(f"Using MOCK income statement data for {symbol}")
         return self._get_mock_income_statement(symbol, limit)
 
-    def get_institutional_ownership(self, symbol: str, exchange: str = "NSE") -> List[Dict[str, Any]]:
+    async def get_institutional_ownership(self, symbol: str, exchange: str = "NSE") -> List[Dict[str, Any]]:
         """
-        Fetch institutional ownership
-        Endpoint: /institutional-holder/{symbol}
+        Fetch institutional ownership (Async)
         """
         fmp_symbol = self._format_symbol(symbol, exchange)
         
@@ -73,13 +70,14 @@ class FMPService:
             url = f"{self.BASE_URL}/institutional-holder/{fmp_symbol}"
             params = {"apikey": self.api_key}
             try:
-                response = requests.get(url, params=params, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    if isinstance(data, list) and data:
-                        return data
-                else:
-                    logger.warning(f"FMP Ownership Request failed: {response.status_code}")
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url, params=params, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if isinstance(data, list) and data:
+                            return data
+                    else:
+                        logger.warning(f"FMP Ownership Request failed: {response.status_code}")
             except Exception as e:
                 logger.error(f"Error fetching ownership for {fmp_symbol}: {e}")
 
@@ -141,10 +139,9 @@ class FMPService:
             {"holder": "Public", "shares": 10000000, "percentHeld": 10.9, "dateReported": "2024-09-30"}
         ]
 
-    def get_key_metrics(self, symbol: str, exchange: str = "NSE", limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_key_metrics(self, symbol: str, exchange: str = "NSE", limit: int = 20) -> List[Dict[str, Any]]:
         """
-        Fetch key metrics (optional, for supplementary data)
-        Endpoint: /key-metrics/{symbol}?period=quarter&limit={limit}
+        Fetch key metrics (Async)
         """
         if not self.api_key:
             return []
@@ -158,18 +155,18 @@ class FMPService:
         }
         
         try:
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            return data if isinstance(data, list) else []
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                return data if isinstance(data, list) else []
         except Exception as e:
             logger.error(f"Error fetching key metrics for {fmp_symbol}: {e}")
             return []
 
-    def get_balance_sheet_statement(self, symbol: str, exchange: str = "NSE", limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_balance_sheet_statement(self, symbol: str, exchange: str = "NSE", limit: int = 20) -> List[Dict[str, Any]]:
         """
-        Fetch quarterly balance sheet statement
-        Endpoint: /balance-sheet-statement/{symbol}?period=quarter&limit={limit}
+        Fetch quarterly balance sheet statement (Async)
         """
         fmp_symbol = self._format_symbol(symbol, exchange)
         
@@ -181,15 +178,16 @@ class FMPService:
                 "apikey": self.api_key
             }
             try:
-                response = requests.get(url, params=params, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    if isinstance(data, list) and data:
-                        return data
-                    if isinstance(data, dict) and "Error Message" in data:
-                        logger.warning(f"FMP API Error: {data['Error Message']}")
-                else:
-                    logger.warning(f"FMP Balance Sheet Request failed: {response.status_code} - {response.text}")
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url, params=params, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if isinstance(data, list) and data:
+                            return data
+                        if isinstance(data, dict) and "Error Message" in data:
+                            logger.warning(f"FMP API Error: {data['Error Message']}")
+                    else:
+                        logger.warning(f"FMP Balance Sheet Request failed: {response.status_code} - {response.text}")
             except Exception as e:
                 logger.error(f"Error fetching balance sheet for {fmp_symbol}: {e}")
 

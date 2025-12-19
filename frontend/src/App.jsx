@@ -8,39 +8,87 @@ import LoadingAnimation from './components/LoadingAnimation'
 import './index.css'
 
 function App() {
-  const [analysisData, setAnalysisData] = useState(null)
+  const [techData, setTechData] = useState(null)
+  const [fundamentalData, setFundamentalData] = useState(null)
+  const [analysisSummary, setAnalysisSummary] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [symbol, setSymbol] = useState('') // Track current symbol
-  const [activeTab, setActiveTab] = useState('technical') // 'technical' or 'fundamental'
+  const [symbol, setSymbol] = useState('')
+  const [activeTab, setActiveTab] = useState('technical')
 
   const handleAnalyze = async (symbolValue, exchange, timeframe = 'day') => {
     setLoading(true)
     setError(null)
-    setAnalysisData(null)
-    setSymbol(symbolValue) // Store the symbol being analyzed
+    setTechData(null)
+    setFundamentalData(null)
+    setAnalysisSummary(null)
+    setSymbol(symbolValue)
 
-    try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ symbol: symbolValue, exchange, timeframe }),
-      })
+    const payload = { symbol: symbolValue, exchange, timeframe };
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to analyze stock')
+    // Progressive requests
+    const fetchTech = async () => {
+      try {
+        const res = await fetch('/api/analyze/technical', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTechData(data);
+        } else {
+          setError("Failed to fetch technical data");
+        }
+      } catch (e) {
+        console.error("Tech fetch error", e);
+        setError("Failed to connect to server");
       }
+    };
 
-      const data = await response.json()
-      setAnalysisData(data)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    const fetchFundamental = async () => {
+      try {
+        const res = await fetch('/api/analyze/fundamental', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFundamentalData(data);
+        }
+      } catch (e) {
+        console.error("Fundamental fetch error", e);
+      }
+    };
+
+    const fetchSummary = async () => {
+      try {
+        const res = await fetch('/api/analyze/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAnalysisSummary(data.analysis);
+        }
+      } catch (e) {
+        console.error("Summary fetch error", e);
+      }
+    };
+
+    // Run all in parallel - the UI will update as each finishes
+    // We don't wait for all to finish to show the chart
+    fetchTech();
+    fetchFundamental();
+    fetchSummary();
+
+    // We can stop the global loading spinner once we have enough to show SOMETHING
+    // or just let it finish when we want. For now, let's say it finishes when Tech is done.
+    Promise.all([fetchTech(), fetchFundamental(), fetchSummary()]).finally(() => {
+      setLoading(false);
+    });
   }
 
   return (
@@ -64,24 +112,24 @@ function App() {
 
 
         {/* Loading Animation */}
-        {loading && symbol && (
+        {loading && symbol && !techData && (
           <LoadingAnimation symbol={symbol} />
         )}
 
         {/* Error Display */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            <p className="font-semibold">Error</p>
-            <p>{error}</p>
+          <div className="mb-6 bg-red-900/20 border border-red-500/50 text-red-200 px-4 py-3 rounded-lg backdrop-blur-sm">
+            <p className="font-semibold text-red-400">Analysis Error</p>
+            <p className="text-sm">{error}</p>
           </div>
         )}
 
 
         {/* Results */}
-        {analysisData && !loading && (
+        {techData && (
           <div className="space-y-6">
             {/* Stock Info */}
-            <StockInfo quote={analysisData.quote} symbol={analysisData.symbol} />
+            <StockInfo quote={techData.quote} symbol={techData.symbol} />
 
             {/* Tab Navigation */}
             <div className="flex space-x-4 mb-6">
@@ -109,43 +157,41 @@ function App() {
             {activeTab === 'technical' ? (
               <div className="space-y-6 animate-fade-in-up">
                 {/* Chart */}
-                {analysisData.indicators && (
+                {techData.indicators && (
                   <StockChart
-                    symbol={analysisData.symbol}
-                    quote={analysisData.quote}
-                    ohlcData={analysisData.ohlc_data}
-                    indicators={analysisData.indicators}
+                    symbol={techData.symbol}
+                    quote={techData.quote}
+                    ohlcData={techData.ohlc_data}
+                    indicators={techData.indicators}
                   />
                 )}
 
-                {/* AI Analysis */}
-                {analysisData.analysis && (
-                  <AIAnalysisDisplay analysis={analysisData.analysis} />
+                {/* AI Analysis Summary */}
+                {analysisSummary ? (
+                  <AIAnalysisDisplay analysis={analysisSummary} />
+                ) : (
+                  <div className="p-8 bg-slate-900/50 rounded-2xl border border-slate-800 text-center animate-pulse">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500 mx-auto mb-4"></div>
+                    <p className="text-slate-400 text-sm font-light">AI agent is drafting analysis...</p>
+                  </div>
                 )}
               </div>
             ) : (
               <div className="space-y-6 animate-fade-in-up">
-                <FundamentalAnalysis data={analysisData.fundamental_data} />
+                {fundamentalData ? (
+                  <FundamentalAnalysis data={fundamentalData} />
+                ) : (
+                  <div className="p-12 bg-slate-900/50 rounded-2xl border border-slate-800 text-center">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-emerald-500 mx-auto mb-4"></div>
+                    <p className="text-slate-400">Fetching fundamental metrics...</p>
+                  </div>
+                )}
 
-                {/* Also show AI Analysis in Fundamental view if relevant, or keep it shared? 
-                     The AI Analysis is "Combined", so it fits both. Let's show it here too or move out of tabs.
-                     For now, I'll show it in both or just let FundamentalAnalysis handle its own view. 
-                     Fundamental component is rich enough. I will add AI Analysis at bottom of Fundamental too if requested.
-                     But let's stick to just the component I built.
-                  */}
-                {analysisData.analysis && (
-                  <AIAnalysisDisplay analysis={analysisData.analysis} />
+                {analysisSummary && (
+                  <AIAnalysisDisplay analysis={analysisSummary} />
                 )}
               </div>
             )}
-          </div>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-            <p className="mt-4 text-gray-600">Analyzing stock data...</p>
           </div>
         )}
       </div>
@@ -154,5 +200,3 @@ function App() {
 }
 
 export default App
-
-

@@ -13,14 +13,34 @@ class FundamentalTool:
     def __init__(self):
         self.fmp = FMPService()
 
-    def analyze_stock(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
+    async def analyze_stock(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
         """
-        Perform comprehensive fundamental analysis
+        Perform comprehensive fundamental analysis (Parallelized)
         """
-        # 1. Fetch Data
-        income_stmt = self.fmp.get_income_statement(symbol, exchange, limit=20) # 5 years
-        balance_sheet = self.fmp.get_balance_sheet_statement(symbol, exchange, limit=20)
-        ownership = self.fmp.get_institutional_ownership(symbol, exchange)
+        # 1. Fetch Data in Parallel
+        import asyncio
+        
+        tasks = [
+            self.fmp.get_income_statement(symbol, exchange, limit=20),
+            self.fmp.get_balance_sheet_statement(symbol, exchange, limit=20),
+            self.fmp.get_institutional_ownership(symbol, exchange)
+        ]
+        
+        # Execute all in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        income_stmt, balance_sheet, ownership = results
+        
+        # Handle exceptions gracefully
+        if isinstance(income_stmt, Exception):
+            logger.error(f"Error in income stmt: {income_stmt}")
+            income_stmt = []
+        if isinstance(balance_sheet, Exception):
+            logger.error(f"Error in balance sheet: {balance_sheet}")
+            balance_sheet = []
+        if isinstance(ownership, Exception):
+            logger.error(f"Error in ownership: {ownership}")
+            ownership = []
 
         if not income_stmt:
             return {"error": "No financial data available"}
@@ -48,8 +68,8 @@ class FundamentalTool:
             "symbol": symbol,
             "exchange": exchange,
             "financials": metrics,
-            "ownership": ownership,
-            "raw_data": income_stmt # Optional, if needed by frontend directly
+            "ownership": ownership
+            # Removed raw_data for optimization
         }
 
     def _calculate_metrics(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -105,6 +125,7 @@ class FundamentalTool:
         
         # Yearly Growth
         yearly_df['eps_growth'] = yearly_df['eps'].pct_change() * 100
+        yearly_df['revenue_growth'] = yearly_df['revenue'].pct_change() * 100
 
         # CAGR (5 Year)
         eps_cagr = 0
@@ -135,11 +156,17 @@ class FundamentalTool:
         df_obj = df.astype(object).where(pd.notnull(df), None)
         yearly_obj = yearly_df.astype(object).where(pd.notnull(yearly_df), None)
              
-        quarterly_data = df_obj.sort_values('date', ascending=False).to_dict(orient='records')
-        yearly_data = yearly_obj.sort_values('year', ascending=False).to_dict(orient='records')
+        # 3. Trim columns for payload optimization (Restoring essential columns)
+        essential_cols = [
+            'date', 'period', 'calendarYear', 'eps', 'revenue', 
+            'net_margin', 'eps_qoq', 'sales_qoq', 'eps_yoy', 
+            'sales_yoy', 'roce', 'other_income_pct', 'eps_rolling_2q_growth', 
+            'sales_rolling_2q_growth'
+        ]
+        available_cols = [c for c in essential_cols if c in df_obj.columns]
         
-        # 3. Ensure no numpy types in list of dicts (pandas to_dict usually handles this but being safe)
-        # (Already handled by to_dict usually, but let's trust it for now after Inf removal)
+        quarterly_data = df_obj.sort_values('date', ascending=False)[available_cols].to_dict(orient='records')
+        yearly_data = yearly_obj.sort_values('year', ascending=False).to_dict(orient='records')
 
         return {
             "quarterly": quarterly_data,

@@ -17,7 +17,7 @@ fundamental_tool = FundamentalTool()
 llm_service = LLMService()
 
 
-def init_node(state: AgentState) -> AgentState:
+async def init_node(state: AgentState) -> AgentState:
     """
     Initialize node - validates input and sets up initial state
     """
@@ -26,10 +26,11 @@ def init_node(state: AgentState) -> AgentState:
     return state
 
 
-def fetch_stock_data_node(state: AgentState) -> AgentState:
+async def fetch_stock_data_node(state: AgentState) -> AgentState:
     """
-    Fetch stock data from Kite API (falls back to mock data if API fails)
+    Fetch stock data from Kite API (Parallelized, Async)
     """
+    import asyncio
     try:
         symbol = state["symbol"]
         exchange = state["exchange"]
@@ -37,66 +38,58 @@ def fetch_stock_data_node(state: AgentState) -> AgentState:
         
         logger.info(f"Fetching stock data for {symbol} on {exchange} ({timeframe})")
         
-        # Determine duration and interval based on timeframe
-        days = 365 # Default 1 year for daily
+        # Determine duration and interval
+        days = 365
         interval = "day"
-        
         if timeframe == "week":
-            days = 1095 # ~3 years
+            days = 1095
             interval = "week"
         elif timeframe == "hour":
-            days = 60 # Recent history
+            days = 60
             interval = "hour"
         
-        # Fetch quote (current price) - will use mock data if API fails
-        quote = kite_service.get_quote(symbol, exchange)
+        # Run sync Kite calls in threads to avoid blocking, and execute them in parallel
+        loop = asyncio.get_event_loop()
         
-        # Fetch OHLC data (historical) - will use mock data if API fails
-        ohlc_data = kite_service.get_ohlc(symbol, exchange, days=days, interval=interval)
+        tasks = [
+            loop.run_in_executor(None, kite_service.get_quote, symbol, exchange),
+            loop.run_in_executor(None, kite_service.get_ohlc, symbol, exchange, days, interval)
+        ]
         
-        # Verify we got valid data (both methods return mock data if API fails, so this should always succeed)
-        if not quote or not ohlc_data:
-            logger.warning(f"Received empty data for {symbol}, using fallback")
-            # Still set the data even if empty - the service methods always return something
-            quote = quote or {}
-            ohlc_data = ohlc_data or {}
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        quote, ohlc_data = results
         
-        # Fallback for volume if market is closed (volume might be 0)
-        # We use the volume from the last OHLC data point
+        # Handle exceptions
+        if isinstance(quote, Exception):
+            logger.error(f"Error fetching quote: {quote}")
+            quote = {}
+        if isinstance(ohlc_data, Exception):
+            logger.error(f"Error fetching ohlc: {ohlc_data}")
+            ohlc_data = {}
+        
+        # Fallback for volume
         if quote.get("volume") == 0 and ohlc_data.get("data"):
             last_ohlc = ohlc_data["data"][-1]
             last_vol = last_ohlc.get("volume") or last_ohlc.get("Volume") or 0
             if last_vol > 0:
                 quote["volume"] = last_vol
-                logger.info(f"Using historical volume {last_vol} as quote volume is 0")
         
         state["quote"] = quote
         state["ohlc_data"] = ohlc_data
         state["status"] = "data_fetched"
         
-        data_source = "real" if kite_service.kite else "mock"
-        logger.info(f"Successfully fetched data for {symbol} (using {data_source} data)")
-        
     except Exception as e:
-        # This should rarely happen since service methods handle errors internally
-        logger.warning(f"Unexpected error in fetch_stock_data_node: {str(e)}. Using mock data fallback.")
-        # Even on error, try to get mock data
-        try:
-            state["quote"] = kite_service._get_mock_quote(symbol, exchange)
-            state["ohlc_data"] = kite_service._get_mock_ohlc(symbol, exchange)
-            state["status"] = "data_fetched"
-            logger.info(f"Using mock data fallback for {symbol}")
-        except Exception as fallback_error:
-            logger.error(f"Failed to get even mock data: {fallback_error}")
-            state["status"] = "error"
-            state["error"] = f"Failed to fetch stock data: {str(e)}"
+        logger.warning(f"Error in fetch_stock_data_node: {str(e)}")
+        state["quote"] = kite_service._get_mock_quote(state["symbol"], state["exchange"])
+        state["ohlc_data"] = kite_service._get_mock_ohlc(state["symbol"], state["exchange"])
+        state["status"] = "data_fetched"
     
     return state
 
 
-def calc_indicators_node(state: AgentState) -> AgentState:
+async def calc_indicators_node(state: AgentState) -> AgentState:
     """
-    Calculate technical indicators
+    Calculate technical indicators (Async)
     """
     try:
         if state.get("status") == "error":
@@ -110,16 +103,18 @@ def calc_indicators_node(state: AgentState) -> AgentState:
         
         logger.info(f"Calculating indicators for {state['symbol']}")
         
-        # Calculate indicators
-        indicators = technical_tool.calculate_indicators(
-            ohlc_data=ohlc_data,
-            current_price=quote.get("last_price", 0) if quote else 0
+        # This is a CPU-bound pandas operation, but we'll follow the pattern
+        import asyncio
+        loop = asyncio.get_event_loop()
+        indicators = await loop.run_in_executor(
+            None, 
+            technical_tool.calculate_indicators,
+            ohlc_data,
+            quote.get("last_price", 0) if quote else 0
         )
         
         state["indicators"] = indicators
         state["status"] = "indicators_calculated"
-        
-        logger.info(f"Successfully calculated indicators for {state['symbol']}")
         
     except Exception as e:
         logger.error(f"Error calculating indicators: {str(e)}")
@@ -130,9 +125,9 @@ def calc_indicators_node(state: AgentState) -> AgentState:
 
 
 
-def fundamental_analysis_node(state: AgentState) -> AgentState:
+async def fundamental_analysis_node(state: AgentState) -> AgentState:
     """
-    Perform fundamental analysis
+    Perform fundamental analysis (Async)
     """
     try:
         if state.get("status") == "error":
@@ -143,25 +138,22 @@ def fundamental_analysis_node(state: AgentState) -> AgentState:
         
         logger.info(f"Running fundamental analysis for {symbol}")
         
-        # Run analysis tool
-        fund_data = fundamental_tool.analyze_stock(symbol, exchange)
+        # Run async analysis tool
+        fund_data = await fundamental_tool.analyze_stock(symbol, exchange)
         
         state["fundamental_data"] = fund_data
         state["status"] = "fundamental_analysis_completed"
         
-        logger.info(f"Successfully processed fundamental data for {symbol}")
-        
     except Exception as e:
         logger.error(f"Error in fundamental analysis: {str(e)}")
-        # We don't fail the whole pipeline if fundamental fails, just log it
         state["fundamental_data"] = None
         
     return state
 
 
-def generate_analysis_node(state: AgentState) -> AgentState:
+async def generate_analysis_node(state: AgentState) -> AgentState:
     """
-    Generate AI analysis using LLM
+    Generate AI analysis (Async)
     """
     try:
         if state.get("status") == "error":
@@ -174,18 +166,20 @@ def generate_analysis_node(state: AgentState) -> AgentState:
         
         logger.info(f"Generating AI analysis for {symbol}")
         
-        # Generate analysis
-        analysis = llm_service.generate_analysis(
-            symbol=symbol,
-            quote=quote,
-            indicators=indicators,
-            fundamental_data=fundamental_data
+        # Run LLM generation in thread if it's blocking
+        import asyncio
+        loop = asyncio.get_event_loop()
+        analysis = await loop.run_in_executor(
+            None,
+            llm_service.generate_analysis,
+            symbol,
+            quote,
+            indicators,
+            fundamental_data
         )
         
         state["analysis"] = analysis
         state["status"] = "analysis_generated"
-        
-        logger.info(f"Successfully generated analysis for {symbol}")
         
     except Exception as e:
         logger.error(f"Error generating analysis: {str(e)}")
@@ -195,16 +189,16 @@ def generate_analysis_node(state: AgentState) -> AgentState:
     return state
 
 
-def format_response_node(state: AgentState) -> AgentState:
+async def format_response_node(state: AgentState) -> AgentState:
     """
-    Format final response
+    Format final response (Async)
     """
     if state.get("status") == "error":
         state["status"] = "error"
     else:
         state["status"] = "completed"
     
-    logger.info(f"Analysis completed for {state['symbol']} with status: {state['status']}")
+    logger.info(f"Analysis completed for {state['symbol']}")
     return state
 
 
