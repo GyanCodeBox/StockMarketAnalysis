@@ -21,6 +21,22 @@ const CustomTooltip = ({ active, payload, label }) => {
     return null;
 };
 
+const EPSTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-slate-900 border border-slate-700 p-3 rounded shadow-lg">
+                <p className="text-slate-300 font-bold mb-2">{label}</p>
+                {payload.map((entry, index) => (
+                    <p key={index} style={{ color: entry.color }} className="text-sm">
+                        {entry.name}: {typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
+                    </p>
+                ))}
+            </div>
+        );
+    }
+    return null;
+};
+
 const FinancialCharts = ({ data }) => {
     if (!data || !data.quarterly || data.quarterly.length === 0) {
         return null;
@@ -221,7 +237,7 @@ const FinancialCharts = ({ data }) => {
                                 axisLine={{ stroke: '#4b5563' }}
                                 label={{ value: 'EPS', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
                             />
-                            <Tooltip content={<CustomTooltip />} />
+                            <Tooltip content={<EPSTooltip />} />
                             <Legend wrapperStyle={{ paddingTop: '20px' }} />
 
                             <Area

@@ -4,18 +4,21 @@ import StockInfo from './components/StockInfo'
 import StockChart from './components/StockChart'
 import AIAnalysisDisplay from './components/AIAnalysisDisplay'
 import FundamentalAnalysis from './components/FundamentalAnalysis'
+import LoadingAnimation from './components/LoadingAnimation'
 import './index.css'
 
 function App() {
   const [analysisData, setAnalysisData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [symbol, setSymbol] = useState('') // Track current symbol
   const [activeTab, setActiveTab] = useState('technical') // 'technical' or 'fundamental'
 
-  const handleAnalyze = async (symbol, exchange, timeframe = 'day') => {
+  const handleAnalyze = async (symbolValue, exchange, timeframe = 'day') => {
     setLoading(true)
     setError(null)
     setAnalysisData(null)
+    setSymbol(symbolValue) // Store the symbol being analyzed
 
     try {
       const response = await fetch('/api/analyze', {
@@ -23,7 +26,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ symbol, exchange, timeframe }),
+        body: JSON.stringify({ symbol: symbolValue, exchange, timeframe }),
       })
 
       if (!response.ok) {
@@ -59,6 +62,12 @@ function App() {
           <StockInput onAnalyze={handleAnalyze} loading={loading} />
         </div>
 
+
+        {/* Loading Animation */}
+        {loading && symbol && (
+          <LoadingAnimation symbol={symbol} />
+        )}
+
         {/* Error Display */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
@@ -67,8 +76,9 @@ function App() {
           </div>
         )}
 
+
         {/* Results */}
-        {analysisData && (
+        {analysisData && !loading && (
           <div className="space-y-6">
             {/* Stock Info */}
             <StockInfo quote={analysisData.quote} symbol={analysisData.symbol} />
@@ -78,8 +88,8 @@ function App() {
               <button
                 onClick={() => setActiveTab('technical')}
                 className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'technical'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
               >
                 Technical Analysis
@@ -87,8 +97,8 @@ function App() {
               <button
                 onClick={() => setActiveTab('fundamental')}
                 className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'fundamental'
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
               >
                 Fundamental Analysis

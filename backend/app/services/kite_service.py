@@ -78,17 +78,29 @@ class KiteService:
                 quote_data = self.kite.quote(instrument)
                 if instrument in quote_data:
                     quote = quote_data[instrument]
+                    # Calculate change: Use last_price vs previous_close
+                    last_price = quote.get("last_price", 0)
+                    prev_close = quote.get("ohlc", {}).get("close", 0)
+                    
+                    # Calculate change and change_percent
+                    if prev_close and prev_close > 0:
+                        change = last_price - prev_close
+                        change_percent = (change / prev_close) * 100
+                    else:
+                        change = 0
+                        change_percent = 0
+                    
                     return {
                         "symbol": symbol,
                         "exchange": exchange,
-                        "last_price": quote.get("last_price", 0),
+                        "last_price": last_price,
                         "open": quote.get("ohlc", {}).get("open", 0),
                         "high": quote.get("ohlc", {}).get("high", 0),
                         "low": quote.get("ohlc", {}).get("low", 0),
-                        "close": quote.get("ohlc", {}).get("close", 0),
+                        "close": prev_close,
                         "volume": quote.get("volume", 0),
-                        "change": quote.get("net_change", 0),
-                        "change_percent": quote.get("net_change", 0) / quote.get("ohlc", {}).get("close", 1) * 100 if quote.get("ohlc", {}).get("close", 0) else 0,
+                        "change": round(change, 2),
+                        "change_percent": round(change_percent, 2),
                         "timestamp": datetime.now().isoformat()
                     }
             except Exception as e:
