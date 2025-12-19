@@ -168,28 +168,96 @@ async def analyze_technical(request: AnalyzeRequest):
 @router.post("/analyze/summary")
 async def analyze_summary(request: AnalyzeRequest):
     """
-    Standalone AI Summary endpoint (Async)
+    Optimized AI Summary endpoint (Async)
+    Uses cached technical/fundamental data or fetches them in parallel.
     """
     try:
         symbol = request.symbol.strip().upper()
         exchange = request.exchange or "NSE"
+        timeframe = request.timeframe or "day"
         
-        cache_key = f"summary:{symbol}:{exchange}"
-        cached = cache_manager.get(cache_key)
-        if cached:
-            return {"analysis": cached}
+        # 1. Check final summary cache
+        summary_cache_key = f"summary:{symbol}:{exchange}:{timeframe}"
+        cached_summary = cache_manager.get(summary_cache_key)
+        if cached_summary:
+            return {"analysis": cached_summary}
             
-        agent = create_agent()
-        result = await agent.ainvoke({
-            "symbol": symbol,
-            "exchange": exchange,
-            "timeframe": request.timeframe or "day"
-        })
+        # 2. Try to get components from cache
+        tech_cache_key = f"technical:{symbol}:{exchange}:{timeframe}"
+        fund_cache_key = f"fundamental:{symbol}:{exchange}"
         
-        analysis = result.get("analysis", "")
-        cache_manager.set(cache_key, analysis, ttl_seconds=900)
+        tech_data = cache_manager.get(tech_cache_key)
+        fund_data = cache_manager.get(fund_cache_key)
+        
+        # 3. If missing, fetch them in parallel
+        import asyncio
+        from app.services.technical_tool import TechnicalTool
+        from app.tools.fundamental_tool import FundamentalTool
+        from app.services.llm_service import LLMService # Should use the global one if exists
+        
+        # We need the global llm_service initialized at the top
+        # (Assuming it will be there after my previous edits)
+        
+        tasks = []
+        if not tech_data:
+            from app.services.kite_service import KiteService
+            kite = KiteService()
+            tech = TechnicalTool()
+            
+            async def get_tech():
+                days = 365; interval = "day"
+                if timeframe == "week": days = 1095; interval = "week"
+                elif timeframe == "hour": days = 60; interval = "hour"
+                
+                tasks_tech = [
+                    asyncio.to_thread(kite.get_quote, symbol, exchange),
+                    asyncio.to_thread(kite.get_ohlc, symbol, exchange, days, interval)
+                ]
+                q, ohlc = await asyncio.gather(*tasks_tech)
+                indicators = tech.calculate_indicators(ohlc, q.get("last_price", 0))
+                return {"quote": q, "indicators": indicators, "ohlc_data": ohlc}
+            
+            tasks.append(get_tech())
+        else:
+            # Wrap existing data in a future-like result
+            async def wrap_tech(): return tech_data
+            tasks.append(wrap_tech())
+            
+        if not fund_data:
+            fund_tool = FundamentalTool()
+            tasks.append(fund_tool.analyze_stock(symbol, exchange))
+        else:
+            async def wrap_fund(): return fund_data
+            tasks.append(wrap_fund())
+            
+        # Run parallel fetches
+        fetched_results = await asyncio.gather(*tasks)
+        
+        # Map results back
+        t_data = fetched_results[0]
+        f_data = fetched_results[1]
+        
+        # Cache them for other endpoints too
+        if not tech_data:
+            cache_manager.set(tech_cache_key, t_data, ttl_seconds=300)
+        if not fund_data:
+            cache_manager.set(fund_cache_key, f_data, ttl_seconds=3600)
+            
+        # 4. Generate Analysis
+        from app.agent.nodes import llm_service # Use the global one
+        analysis = await llm_service.generate_analysis(
+            symbol=symbol,
+            quote=t_data["quote"],
+            indicators=t_data["indicators"],
+            fundamental_data=f_data
+        )
+        
+        # 5. Cache and return
+        cache_manager.set(summary_cache_key, analysis, ttl_seconds=900)
         return {"analysis": analysis}
+        
     except Exception as e:
+        logger.error(f"Summary generation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

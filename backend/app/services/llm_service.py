@@ -11,14 +11,16 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 try:
-    from openai import OpenAI
+    from openai import AsyncOpenAI
 except ImportError:
-    OpenAI = None
+    AsyncOpenAI = None
 
 try:
     import anthropic
+    from anthropic import AsyncAnthropic
 except ImportError:
     anthropic = None
+    AsyncAnthropic = None
 
 
 class LLMService:
@@ -31,38 +33,26 @@ class LLMService:
         self.openai_client = None
         self.anthropic_client = None
         
-        if OpenAI and self.openai_api_key:
+        if AsyncOpenAI and self.openai_api_key:
             try:
-                # Initialize with only api_key to avoid proxy/other parameter issues
-                self.openai_client = OpenAI(api_key=self.openai_api_key.strip())
-                logger.info("OpenAI client initialized")
-            except TypeError as e:
-                # Handle version compatibility issues
-                logger.warning(f"OpenAI client initialization failed (version issue): {e}")
-                logger.info("OpenAI will use mock analysis. Consider updating: pip install --upgrade openai")
-                self.openai_client = None
+                self.openai_client = AsyncOpenAI(api_key=self.openai_api_key.strip())
+                logger.info("Async OpenAI client initialized")
             except Exception as e:
-                logger.warning(f"Failed to initialize OpenAI client: {e}")
+                logger.warning(f"Failed to initialize Async OpenAI client: {e}")
                 self.openai_client = None
         
-        if anthropic and self.anthropic_api_key:
+        if AsyncAnthropic and self.anthropic_api_key:
             try:
-                # Initialize with only api_key to avoid proxy/other parameter issues
-                self.anthropic_client = anthropic.Anthropic(api_key=self.anthropic_api_key.strip())
-                logger.info("Anthropic client initialized")
-            except TypeError as e:
-                # Handle version compatibility issues
-                logger.warning(f"Anthropic client initialization failed (version issue): {e}")
-                logger.info("Anthropic will use mock analysis. Consider updating: pip install --upgrade anthropic")
-                self.anthropic_client = None
+                self.anthropic_client = AsyncAnthropic(api_key=self.anthropic_api_key.strip())
+                logger.info("Async Anthropic client initialized")
             except Exception as e:
-                logger.warning(f"Failed to initialize Anthropic client: {e}")
+                logger.warning(f"Failed to initialize Async Anthropic client: {e}")
                 self.anthropic_client = None
         
         if not self.openai_client and not self.anthropic_client:
             logger.warning("No LLM API keys found. Using mock analysis.")
     
-    def generate_analysis(
+    async def generate_analysis(
         self,
         symbol: str,
         quote: Dict[str, Any],
@@ -70,15 +60,7 @@ class LLMService:
         fundamental_data: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        Generate AI-powered stock analysis
-        
-        Args:
-            symbol: Stock symbol
-            quote: Current quote data
-            indicators: Calculated technical indicators
-            
-        Returns:
-            Plain-language analysis text
+        Generate AI-powered stock analysis (Async)
         """
         # Prepare prompt
         prompt = self._build_analysis_prompt(symbol, quote, indicators, fundamental_data)
@@ -86,13 +68,13 @@ class LLMService:
         # Try OpenAI first, then Anthropic, then mock
         if self.openai_client:
             try:
-                return self._generate_with_openai(prompt)
+                return await self._generate_with_openai(prompt)
             except Exception as e:
                 logger.error(f"OpenAI generation failed: {e}")
         
         if self.anthropic_client:
             try:
-                return self._generate_with_anthropic(prompt)
+                return await self._generate_with_anthropic(prompt)
             except Exception as e:
                 logger.error(f"Anthropic generation failed: {e}")
         
@@ -157,12 +139,12 @@ Keep the analysis concise (3-4 paragraphs), use plain language, and format with 
         
         return prompt
     
-    def _generate_with_openai(self, prompt: str) -> str:
+    async def _generate_with_openai(self, prompt: str) -> str:
         """Generate analysis using OpenAI"""
-        response = self.openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Using cost-effective model
+        response = await self.openai_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a professional stock market analyst. Provide clear, concise technical analysis."},
+                {"role": "system", "content": "You are a professional stock market analyst. Provide clear, concise technical and fundamental analysis."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -171,12 +153,12 @@ Keep the analysis concise (3-4 paragraphs), use plain language, and format with 
         
         return response.choices[0].message.content.strip()
     
-    def _generate_with_anthropic(self, prompt: str) -> str:
+    async def _generate_with_anthropic(self, prompt: str) -> str:
         """Generate analysis using Anthropic Claude"""
-        message = self.anthropic_client.messages.create(
-            model="claude-3-haiku-20240307",  # Using cost-effective model
+        message = await self.anthropic_client.messages.create(
+            model="claude-3-haiku-20240307",
             max_tokens=500,
-            system="You are a professional stock market analyst. Provide clear, concise technical analysis.",
+            system="You are a professional stock market analyst.",
             messages=[
                 {"role": "user", "content": prompt}
             ]

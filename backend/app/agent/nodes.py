@@ -167,11 +167,7 @@ async def generate_analysis_node(state: AgentState) -> AgentState:
         logger.info(f"Generating AI analysis for {symbol}")
         
         # Run LLM generation in thread if it's blocking
-        import asyncio
-        loop = asyncio.get_event_loop()
-        analysis = await loop.run_in_executor(
-            None,
-            llm_service.generate_analysis,
+        analysis = await llm_service.generate_analysis(
             symbol,
             quote,
             indicators,
