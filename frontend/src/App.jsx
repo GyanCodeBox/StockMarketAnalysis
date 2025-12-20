@@ -9,22 +9,22 @@ import './index.css'
 
 function App() {
   const [techData, setTechData] = useState(null)
-  const [fundamentalData, setFundamentalData] = useState(null)
   const [analysisSummary, setAnalysisSummary] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [symbol, setSymbol] = useState('')
+  const [exchange, setExchange] = useState('NSE')
   const [activeTab, setActiveTab] = useState('technical')
 
-  const handleAnalyze = async (symbolValue, exchange, timeframe = 'day') => {
+  const handleAnalyze = async (symbolValue, exchangeValue, timeframe = 'day') => {
     setLoading(true)
     setError(null)
     setTechData(null)
-    setFundamentalData(null)
     setAnalysisSummary(null)
     setSymbol(symbolValue)
+    setExchange(exchangeValue)
 
-    const payload = { symbol: symbolValue, exchange, timeframe };
+    const payload = { symbol: symbolValue, exchange: exchangeValue, timeframe };
 
     // Progressive requests
     const fetchTech = async () => {
@@ -46,21 +46,6 @@ function App() {
       }
     };
 
-    const fetchFundamental = async () => {
-      try {
-        const res = await fetch('/api/analyze/fundamental', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setFundamentalData(data);
-        }
-      } catch (e) {
-        console.error("Fundamental fetch error", e);
-      }
-    };
 
     const fetchSummary = async () => {
       try {
@@ -78,15 +63,12 @@ function App() {
       }
     };
 
-    // Run all in parallel - the UI will update as each finishes
-    // We don't wait for all to finish to show the chart
+    // Run Tech and Summary in parallel
+    // These are the "Instant" components
     fetchTech();
-    fetchFundamental();
     fetchSummary();
 
-    // We can stop the global loading spinner once we have enough to show SOMETHING
-    // or just let it finish when we want. For now, let's say it finishes when Tech is done.
-    Promise.all([fetchTech(), fetchFundamental(), fetchSummary()]).finally(() => {
+    Promise.all([fetchTech(), fetchSummary()]).finally(() => {
       setLoading(false);
     });
   }
@@ -178,14 +160,7 @@ function App() {
               </div>
             ) : (
               <div className="space-y-6 animate-fade-in-up">
-                {fundamentalData ? (
-                  <FundamentalAnalysis data={fundamentalData} />
-                ) : (
-                  <div className="p-12 bg-slate-900/50 rounded-2xl border border-slate-800 text-center">
-                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-emerald-500 mx-auto mb-4"></div>
-                    <p className="text-slate-400">Fetching fundamental metrics...</p>
-                  </div>
-                )}
+                <FundamentalAnalysis symbol={symbol} exchange={exchange} />
 
                 {analysisSummary && (
                   <AIAnalysisDisplay analysis={analysisSummary} />

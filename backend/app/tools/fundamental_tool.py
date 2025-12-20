@@ -13,63 +13,59 @@ class FundamentalTool:
     def __init__(self):
         self.fmp = FMPService()
 
-    async def analyze_stock(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
-        """
-        Perform comprehensive fundamental analysis (Parallelized)
-        """
-        # 1. Fetch Data in Parallel
+    async def get_financial_data(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
+        """Fetch and process financial performance data only"""
         import asyncio
-        
         tasks = [
             self.fmp.get_income_statement(symbol, exchange, limit=20),
-            self.fmp.get_balance_sheet_statement(symbol, exchange, limit=20),
-            self.fmp.get_institutional_ownership(symbol, exchange)
+            self.fmp.get_balance_sheet_statement(symbol, exchange, limit=20)
         ]
-        
-        # Execute all in parallel
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        income_stmt, balance_sheet = results
+
+        if isinstance(income_stmt, Exception) or not income_stmt:
+            logger.error(f"Error or no data in income stmt: {income_stmt}")
+            return {"error": "No financial data available"}
         
-        income_stmt, balance_sheet, ownership = results
-        
-        # Handle exceptions gracefully
-        if isinstance(income_stmt, Exception):
-            logger.error(f"Error in income stmt: {income_stmt}")
-            income_stmt = []
         if isinstance(balance_sheet, Exception):
             logger.error(f"Error in balance sheet: {balance_sheet}")
             balance_sheet = []
-        if isinstance(ownership, Exception):
-            logger.error(f"Error in ownership: {ownership}")
-            ownership = []
 
-        if not income_stmt:
-            return {"error": "No financial data available"}
-
-        # 2. Process Data (Convert to DataFrame for easier calc)
         df = pd.DataFrame(income_stmt)
-        # Ensure date is datetime FIRST
         df['date'] = pd.to_datetime(df['date'])
         
-        # Merge balance sheet if available
         if balance_sheet:
             bs_df = pd.DataFrame(balance_sheet)
-            # Merge on date
             bs_df['date'] = pd.to_datetime(bs_df['date'])
             df = df.merge(bs_df[['date', 'totalAssets', 'totalCurrentLiabilities']], on='date', how='left')
         
-        # Sort ascending
         df = df.sort_values('date', ascending=True).reset_index(drop=True)
+        return self._calculate_metrics(df)
 
-        # 3. Calculate Metrics
-        metrics = self._calculate_metrics(df)
+    async def get_ownership_data(self, symbol: str, exchange: str = "NSE") -> List[Dict[str, Any]]:
+        """Fetch ownership data only"""
+        try:
+            return await self.fmp.get_institutional_ownership(symbol, exchange)
+        except Exception as e:
+            logger.error(f"Error fetching ownership: {e}")
+            return []
+
+    async def analyze_stock(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
+        """
+        Perform comprehensive fundamental analysis (Legacy/Wrapper)
+        """
+        import asyncio
+        tasks = [
+            self.get_financial_data(symbol, exchange),
+            self.get_ownership_data(symbol, exchange)
+        ]
+        financials, ownership = await asyncio.gather(*tasks)
         
-        # 4. Structure Output
         return {
             "symbol": symbol,
             "exchange": exchange,
-            "financials": metrics,
+            "financials": financials,
             "ownership": ownership
-            # Removed raw_data for optimization
         }
 
     def _calculate_metrics(self, df: pd.DataFrame) -> Dict[str, Any]:

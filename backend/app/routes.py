@@ -117,6 +117,87 @@ async def analyze_fundamental(request: AnalyzeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/fundamental/financials")
+async def get_fundamental_financials(request: AnalyzeRequest):
+    """
+    Get only financial performance data
+    """
+    try:
+        symbol = request.symbol.strip().upper()
+        exchange = request.exchange or "NSE"
+        cache_key = f"fund_fin:{symbol}:{exchange}"
+        cached = cache_manager.get(cache_key)
+        if cached: return cached
+        
+        from app.tools.fundamental_tool import FundamentalTool
+        tool = FundamentalTool()
+        data = await tool.get_financial_data(symbol, exchange)
+        
+        cache_manager.set(cache_key, data, ttl_seconds=3600)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/fundamental/shareholding")
+async def get_fundamental_shareholding(request: AnalyzeRequest):
+    """
+    Get only shareholding pattern data
+    """
+    try:
+        symbol = request.symbol.strip().upper()
+        exchange = request.exchange or "NSE"
+        cache_key = f"fund_share:{symbol}:{exchange}"
+        cached = cache_manager.get(cache_key)
+        if cached: return cached
+        
+        from app.tools.fundamental_tool import FundamentalTool
+        tool = FundamentalTool()
+        data = await tool.get_ownership_data(symbol, exchange)
+        
+        cache_manager.set(cache_key, data, ttl_seconds=86400) # 1 day
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/fundamental/ai-insights")
+async def get_fundamental_ai_insights(request: AnalyzeRequest):
+    """
+    Generate AI insights for fundamentals
+    """
+    try:
+        symbol = request.symbol.strip().upper()
+        exchange = request.exchange or "NSE"
+        cache_key = f"fund_ai:{symbol}:{exchange}"
+        cached = cache_manager.get(cache_key)
+        if cached: return {"analysis": cached}
+        
+        from app.tools.fundamental_tool import FundamentalTool
+        from app.agent.nodes import llm_service
+        
+        tool = FundamentalTool()
+        # Fetch data needed for AI
+        tasks = [
+            tool.get_financial_data(symbol, exchange),
+            tool.get_ownership_data(symbol, exchange)
+        ]
+        import asyncio
+        fin, owner = await asyncio.gather(*tasks)
+        
+        prompt = f"""Analyze the fundamental health of {symbol}. 
+Financials: {fin}
+Ownership: {owner}
+Please provide a deep dive into financial strength, growth prospects, and potential risks. 
+Format with markdown headers."""
+        
+        # We can reuse the generate_analysis but maybe refine for fundamentals
+        # For now, let's use a direct prompt to llm_service
+        analysis = await llm_service._generate_with_openai(prompt)
+        
+        cache_manager.set(cache_key, analysis, ttl_seconds=3600)
+        return {"analysis": analysis}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/analyze/technical")
 async def analyze_technical(request: AnalyzeRequest):
     """
