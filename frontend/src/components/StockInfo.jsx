@@ -14,12 +14,19 @@ function StockInfo({ quote, symbol }) {
           <p className="text-slate-400 text-sm font-mono tracking-wider">MARKET PRICE</p>
         </div>
         <div className="text-right z-10">
-          <p className="text-4xl font-mono font-bold text-white tracking-tighter">
-            ₹{quote.last_price?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className={`text-lg font-mono font-medium ${isPositive ? 'text-emerald-400' : 'text-rose-400'} flex items-center justify-end gap-1`}>
-            {isPositive ? '▲' : '▼'} {Math.abs(quote.change || 0).toFixed(2)} ({changePercent.toFixed(2)}%)
-          </p>
+          <div className="flex flex-col items-end">
+            {quote.is_mock && (
+              <span className="text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded font-bold mb-1 border border-amber-500/30">
+                SIMULATED DATA
+              </span>
+            )}
+            <p className="text-4xl font-mono font-bold text-white tracking-tighter">
+              ₹{quote.last_price?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className={`text-lg font-mono font-medium ${isPositive ? 'text-emerald-400' : 'text-rose-400'} flex items-center justify-end gap-1`}>
+              {isPositive ? '▲' : '▼'} {Math.abs(quote.change || 0).toFixed(2)} ({changePercent.toFixed(2)}%)
+            </p>
+          </div>
         </div>
       </div>
 

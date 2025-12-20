@@ -13,7 +13,8 @@ const StatisticCard = ({ label, value, subtext, trend }) => (
             </h3>
             {trend !== undefined && trend !== null && (
                 <span className={`text-xs font-bold ${parseFloat(trend) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {parseFloat(trend) >= 0 ? '▲' : '▼'} {Math.abs(parseFloat(trend))}%
+                    {parseFloat(trend) >= 0 ? '▲ ' : '▼ '}
+                    {Math.abs(parseFloat(trend)).toFixed(2)}%
                 </span>
             )}
         </div>
@@ -61,13 +62,13 @@ const FundamentalAnalysis = ({ symbol, exchange }) => {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <StatisticCard
                                     label="5Y EPS CAGR"
-                                    value={`${cagr.eps_5y || 0}%`}
+                                    value={`${(cagr.eps_5y || 0).toFixed(2)}%`}
                                     subtext="Profit Growth Velocity"
                                     trend={cagr.eps_5y}
                                 />
                                 <StatisticCard
                                     label="5Y Sales CAGR"
-                                    value={`${cagr.sales_5y || 0}%`}
+                                    value={`${(cagr.sales_5y || 0).toFixed(2)}%`}
                                     subtext="Revenue Expansion Rate"
                                     trend={cagr.sales_5y}
                                 />
@@ -109,7 +110,7 @@ const FundamentalAnalysis = ({ symbol, exchange }) => {
 
             {/* 3. AI Fundamental Insights Section */}
             <LazyAccordionSection
-                title="AI Fundamental Intelligence"
+                title="AI Fundamental Analysis"
                 icon="🤖"
                 description="Deep dive analysis into financial health and risks"
                 endpoint="/api/fundamental/ai-insights"

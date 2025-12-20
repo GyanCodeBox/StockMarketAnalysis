@@ -98,7 +98,7 @@ class KiteService:
                         "high": quote.get("ohlc", {}).get("high", 0),
                         "low": quote.get("ohlc", {}).get("low", 0),
                         "close": prev_close,
-                        "volume": quote.get("volume", 0),
+                        "volume": quote.get("volume") or quote.get("last_quantity") or 0,
                         "change": round(change, 2),
                         "change_percent": round(change_percent, 2),
                         "timestamp": datetime.now().isoformat()
@@ -343,49 +343,75 @@ class KiteService:
             return None
     
     def _get_mock_quote(self, symbol: str, exchange: str) -> Dict[str, Any]:
-        """Generate mock quote data for testing"""
+        """Generate mock quote data for testing (mathematically consistent)"""
         import random
-        base_price = random.uniform(100, 5000)
-        change = random.uniform(-50, 50)
+        # Base price for specific stocks to make it feel more real if we can
+        price_map = {
+            "RELIANCE": 2500,
+            "TCS": 3800,
+            "INFY": 1500,
+            "BHARTIARTL": 1600,
+            "SBIN": 800,
+            "HDFCBANK": 1700
+        }
+        base_price = price_map.get(symbol, random.uniform(100, 2000))
+        # Add some random variance to the "current" price
+        last_price = base_price * (1 + random.uniform(-0.02, 0.02))
+        # Yesterday's close
+        prev_close = base_price
+        
+        change = last_price - prev_close
+        change_percent = (change / prev_close) * 100
         
         return {
             "symbol": symbol,
             "exchange": exchange,
-            "last_price": round(base_price, 2),
-            "open": round(base_price - change, 2),
-            "high": round(base_price + abs(change), 2),
-            "low": round(base_price - abs(change), 2),
-            "close": round(base_price, 2),
-            "volume": random.randint(1000000, 10000000),
+            "last_price": round(last_price, 2),
+            "open": round(last_price * 0.99, 2),
+            "high": round(last_price * 1.01, 2),
+            "low": round(last_price * 0.98, 2),
+            "close": round(prev_close, 2),
+            "volume": random.randint(5000000, 25000000),
             "change": round(change, 2),
-            "change_percent": round((change / base_price) * 100, 2),
-            "timestamp": datetime.now().isoformat()
+            "change_percent": round(change_percent, 2),
+            "timestamp": datetime.now().isoformat(),
+            "is_mock": True
         }
     
     def _get_mock_ohlc(self, symbol: str, exchange: str, days: int) -> Dict[str, Any]:
-        """Generate mock OHLC data for testing"""
+        """Generate mock OHLC data for testing (realistic trends)"""
         import random
-        base_price = random.uniform(100, 5000)
-        data = []
+        # Base price for specific stocks to make it feel more real
+        price_map = {
+            "RELIANCE": 2500,
+            "TCS": 3800,
+            "INFY": 1500,
+            "BHARTIARTL": 1600,
+            "SBIN": 800,
+            "HDFCBANK": 1700
+        }
+        base_price = price_map.get(symbol, random.uniform(100, 2000))
         
-        for i in range(days, 0, -1):
-            date = datetime.now() - timedelta(days=i)
-            price_change = random.uniform(-20, 20)
-            open_price = base_price + price_change
-            close_price = open_price + random.uniform(-10, 10)
-            high_price = max(open_price, close_price) + random.uniform(0, 10)
-            low_price = min(open_price, close_price) - random.uniform(0, 10)
+        ohlc_data = []
+        current_price = base_price
+        
+        for i in range(days):
+            date = (datetime.now() - timedelta(days=days-i)).strftime('%Y-%m-%d')
+            # Random walk
+            change_pct = random.uniform(-0.02, 0.02)
+            open_p = current_price
+            close_p = current_price * (1 + change_pct)
+            high_p = max(open_p, close_p) * (1 + random.uniform(0, 0.01))
+            low_p = min(open_p, close_p) * (1 - random.uniform(0, 0.01))
             
-            data.append({
-                "date": date.date().isoformat(),
-                "open": round(open_price, 2),
-                "high": round(high_price, 2),
-                "low": round(low_price, 2),
-                "close": round(close_price, 2),
+            ohlc_data.append({
+                "date": date,
+                "open": round(open_p, 2),
+                "high": round(high_p, 2),
+                "low": round(low_p, 2),
+                "close": round(close_p, 2),
                 "volume": random.randint(1000000, 10000000)
             })
-            
-            base_price = close_price
         
         return {
             "symbol": symbol,

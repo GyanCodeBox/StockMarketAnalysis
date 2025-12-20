@@ -231,6 +231,15 @@ async def analyze_technical(request: AnalyzeRequest):
         ]
         quote, ohlc = await asyncio.gather(*tasks)
         
+        # Volume Fallback: If quote volume is 0 (common on holidays/off-market), use latest OHLC volume
+        if quote and quote.get("volume") == 0 and ohlc.get("data"):
+            for i in range(1, min(len(ohlc["data"]), 4)):
+                candle = ohlc["data"][-i]
+                v = candle.get("volume") or candle.get("Volume") or 0
+                if v > 0:
+                    quote["volume"] = v
+                    break
+        
         # 2. Calc indicators
         indicators = tech.calculate_indicators(ohlc, quote.get("last_price", 0))
         

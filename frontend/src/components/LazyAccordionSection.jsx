@@ -75,7 +75,7 @@ function LazyAccordionSection({ title, icon, description, endpoint, requestParam
 
             {/* Content */}
             <div
-                className={`transition-all duration-500 ease-in-out overflow-hidden ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+                className={`transition-all duration-700 ease-in-out ${isOpen ? 'max-h-[5000px] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'
                     }`}
             >
                 <div className="p-6 border-t border-slate-800 bg-slate-950/30">

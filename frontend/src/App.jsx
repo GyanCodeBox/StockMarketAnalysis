@@ -5,11 +5,11 @@ import StockChart from './components/StockChart'
 import AIAnalysisDisplay from './components/AIAnalysisDisplay'
 import FundamentalAnalysis from './components/FundamentalAnalysis'
 import LoadingAnimation from './components/LoadingAnimation'
+import LazyAccordionSection from './components/LazyAccordionSection'
 import './index.css'
 
 function App() {
   const [techData, setTechData] = useState(null)
-  const [analysisSummary, setAnalysisSummary] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [symbol, setSymbol] = useState('')
@@ -20,7 +20,6 @@ function App() {
     setLoading(true)
     setError(null)
     setTechData(null)
-    setAnalysisSummary(null)
     setSymbol(symbolValue)
     setExchange(exchangeValue)
 
@@ -47,28 +46,11 @@ function App() {
     };
 
 
-    const fetchSummary = async () => {
-      try {
-        const res = await fetch('/api/analyze/summary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setAnalysisSummary(data.analysis);
-        }
-      } catch (e) {
-        console.error("Summary fetch error", e);
-      }
-    };
 
-    // Run Tech and Summary in parallel
-    // These are the "Instant" components
+    // Only fetch Technical data initially for instant feedback
     fetchTech();
-    fetchSummary();
 
-    Promise.all([fetchTech(), fetchSummary()]).finally(() => {
+    Promise.all([fetchTech()]).finally(() => {
       setLoading(false);
     });
   }
@@ -148,23 +130,35 @@ function App() {
                   />
                 )}
 
-                {/* AI Analysis Summary */}
-                {analysisSummary ? (
-                  <AIAnalysisDisplay analysis={analysisSummary} />
-                ) : (
-                  <div className="p-8 bg-slate-900/50 rounded-2xl border border-slate-800 text-center animate-pulse">
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500 mx-auto mb-4"></div>
-                    <p className="text-slate-400 text-sm font-light">AI agent is drafting analysis...</p>
-                  </div>
-                )}
+                {/* Lazy AI Market Intelligence */}
+                <div className="mt-8 pt-4 border-t border-slate-800/50">
+                  <LazyAccordionSection
+                    title="AI Market Intelligence"
+                    icon="🚀"
+                    description="Deep multi-agent research and technical synthesis"
+                    endpoint="/api/analyze/summary"
+                    requestParams={{ symbol, exchange, timeframe: 'day' }}
+                  >
+                    {(data) => <AIAnalysisDisplay analysis={data.analysis} />}
+                  </LazyAccordionSection>
+                </div>
               </div>
             ) : (
               <div className="space-y-6 animate-fade-in-up">
                 <FundamentalAnalysis symbol={symbol} exchange={exchange} />
 
-                {analysisSummary && (
-                  <AIAnalysisDisplay analysis={analysisSummary} />
-                )}
+                {/* Restore AI Market Intelligence to Fundamental tab as well */}
+                <div className="mt-8 pt-4 border-t border-slate-800/50">
+                  <LazyAccordionSection
+                    title="AI Market Intelligence"
+                    icon="🚀"
+                    description="Deep multi-agent research and technical synthesis"
+                    endpoint="/api/analyze/summary"
+                    requestParams={{ symbol, exchange, timeframe: 'day' }}
+                  >
+                    {(data) => <AIAnalysisDisplay analysis={data.analysis} />}
+                  </LazyAccordionSection>
+                </div>
               </div>
             )}
           </div>
