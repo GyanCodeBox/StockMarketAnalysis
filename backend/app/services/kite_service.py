@@ -148,6 +148,8 @@ class KiteService:
         # Ensure we fetch enough days for 200-period MAs if timeframe is short
         if interval in ["hour", "15minute", "5minute"] and days < 60:
             days = 60 # Fetch at least 60 days for intraday to get enough data points
+        elif interval == "week" and days < 365:
+            days = 365 # Fetch at least 1 year for weekly to support 50-week MAs (approx 250 trading days)
             
         if self.kite:
             try:
