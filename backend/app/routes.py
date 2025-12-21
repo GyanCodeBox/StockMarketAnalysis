@@ -3,7 +3,7 @@ API routes for stock analysis
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional, Dict, Any
 from app.agent.graph import create_agent
 from app.services.cache import cache_manager
 from app.services.kite_service import KiteService
@@ -12,11 +12,15 @@ router = APIRouter()
 kite_service = KiteService()
 
 
+class MovingAverageConfig(BaseModel):
+    type: str = Field(..., pattern="^(SMA|EMA|WMA|sma|ema|wma)$")
+    period: int = Field(..., ge=1, le=500)
+
 class AnalyzeRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol to analyze (e.g., 'RELIANCE', 'TCS')")
     exchange: Optional[str] = Field(default="NSE", description="Exchange code (NSE, BSE)")
-    timeframe: Optional[str] = Field(default="day", description="Timeframe: 'day', 'week', 'hour'")
-
+    timeframe: Optional[str] = Field(default="day", description="Timeframe: 'day', 'week', 'hour', '15minute', '5minute'")
+    moving_averages: Optional[List[MovingAverageConfig]] = Field(default=None, description="Custom MA configurations")
 
 class AnalyzeResponse(BaseModel):
     symbol: str
@@ -224,6 +228,13 @@ async def analyze_technical(request: AnalyzeRequest):
         interval = "day"
         if timeframe == "week": days = 1095; interval = "week"
         elif timeframe == "hour": days = 60; interval = "hour"
+        elif timeframe == "15minute": days = 7; interval = "15minute"
+        elif timeframe == "5minute": days = 3; interval = "5minute"
+        
+        # Prepare MA Configs if provided
+        ma_configs = None
+        if request.moving_averages:
+            ma_configs = [ma.dict() for ma in request.moving_averages]
         
         tasks = [
             asyncio.to_thread(kite_service.get_quote, symbol, exchange),
@@ -241,7 +252,7 @@ async def analyze_technical(request: AnalyzeRequest):
                     break
         
         # 2. Calc indicators
-        indicators = tech.calculate_indicators(ohlc, quote.get("last_price", 0))
+        indicators = tech.calculate_indicators(ohlc, quote.get("last_price", 0), ma_configs=ma_configs)
         
         data = {
             "symbol": symbol,

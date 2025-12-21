@@ -7,6 +7,7 @@ import FundamentalAnalysis from './components/FundamentalAnalysis'
 import LoadingAnimation from './components/LoadingAnimation'
 import LazyAccordionSection from './components/LazyAccordionSection'
 import ScrollNavigation from './components/ScrollNavigation'
+import { TIMEFRAME_DEFAULTS } from './components/ChartSettings'
 import './index.css'
 
 function App() {
@@ -30,14 +31,42 @@ function App() {
   }, [isChartMaximized])
 
   const handleAnalyze = async (symbolValue, exchangeValue, timeframe = 'day') => {
+    const isJustTimeframe = symbolValue === symbol && exchangeValue === exchange && techData;
+
     setLoading(true)
     setError(null)
-    setTechData(null)
-    setSymbol(symbolValue)
-    setExchange(exchangeValue)
-    setIsChartMaximized(false)
 
-    const payload = { symbol: symbolValue, exchange: exchangeValue, timeframe };
+    // Only clear data if it's a new stock, to prevent "flash" and full page reload feel
+    if (!isJustTimeframe) {
+      setTechData(null)
+      setSymbol(symbolValue)
+      setExchange(exchangeValue)
+      setIsChartMaximized(false)
+    }
+
+    // Load saved MA config for this symbol/timeframe if it exists
+    let moving_averages = null;
+    const savedPrefs = localStorage.getItem(`chart_prefs_${symbolValue}_${timeframe}`);
+    if (savedPrefs) {
+      try {
+        const prefs = JSON.parse(savedPrefs);
+        // Only send necessary fields to backend
+        moving_averages = prefs.map(ma => ({ type: ma.type, period: ma.period }));
+      } catch (e) {
+        console.warn("Failed to parse saved chart prefs", e);
+      }
+    } else {
+      // Use defaults for this timeframe
+      const defaults = TIMEFRAME_DEFAULTS[timeframe] || TIMEFRAME_DEFAULTS['day'];
+      moving_averages = defaults.filter(ma => ma.enabled).map(ma => ({ type: ma.type, period: ma.period }));
+    }
+
+    const payload = {
+      symbol: symbolValue,
+      exchange: exchangeValue,
+      timeframe,
+      moving_averages
+    };
 
     // Progressive requests
     const fetchTech = async () => {
@@ -151,6 +180,8 @@ function App() {
                     indicators={techData.indicators}
                     isMaximized={isChartMaximized}
                     onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
+                    onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
+                    loading={loading}
                   />
                 )}
 

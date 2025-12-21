@@ -1,11 +1,41 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createChart, ColorType } from 'lightweight-charts'
+import ChartSettings, { TIMEFRAME_DEFAULTS } from './ChartSettings'
+import QuickMAToggles from './QuickMAToggles'
+import { Calendar, Clock, Loader2 } from 'lucide-react'
 
-function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggleMaximize }) {
+function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggleMaximize, onTimeframeChange, loading }) {
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
   const legendRef = useRef(null)
+  const maSeriesRefs = useRef({})
+
+  const [maConfig, setMAConfig] = useState([])
+
+  // Load initial MA config from local storage or use defaults
+  useEffect(() => {
+    const timeframe = ohlcData?.interval || 'day'
+    const savedPrefs = localStorage.getItem(`chart_prefs_${symbol}_${timeframe}`)
+    if (savedPrefs) {
+      try {
+        setMAConfig(JSON.parse(savedPrefs))
+      } catch (e) {
+        setMAConfig(TIMEFRAME_DEFAULTS[timeframe] || TIMEFRAME_DEFAULTS['day'])
+      }
+    } else {
+      setMAConfig(TIMEFRAME_DEFAULTS[timeframe] || TIMEFRAME_DEFAULTS['day'])
+    }
+  }, [symbol, ohlcData?.interval])
+
+  const handleToggleMA = useCallback((index) => {
+    const updated = [...maConfig]
+    updated[index].enabled = !updated[index].enabled
+    setMAConfig(updated)
+    // Save to local storage
+    const timeframe = ohlcData?.interval || 'day'
+    localStorage.setItem(`chart_prefs_${symbol}_${timeframe}`, JSON.stringify(updated))
+  }, [maConfig, symbol, ohlcData?.interval])
 
   // Handle body scroll lock
   useEffect(() => {
@@ -19,19 +49,19 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
     }
   }, [isMaximized])
 
+  // Initialize Chart
   useEffect(() => {
-    if (!chartContainerRef.current || !ohlcData?.data) return
+    if (!chartContainerRef.current) return
 
-    // Create chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#94a3b8', // slate-400
+        textColor: '#94a3b8',
       },
       width: chartContainerRef.current.clientWidth,
-      height: chartContainerRef.current.clientHeight, // Use container height
+      height: chartContainerRef.current.clientHeight,
       grid: {
-        vertLines: { color: '#334155' }, // slate-700
+        vertLines: { color: '#334155' },
         horzLines: { color: '#334155' },
       },
       timeScale: {
@@ -44,8 +74,6 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
       }
     })
 
-    chartRef.current = chart
-
     const candlestickSeries = chart.addCandlestickSeries({
       upColor: '#10b981',
       downColor: '#f43f5e',
@@ -54,21 +82,61 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
       wickDownColor: '#f43f5e',
     })
 
-    candlestickSeriesRef.current = candlestickSeries
-
-    candlestickSeries.priceScale().applyOptions({
-      scaleMargins: { top: 0.1, bottom: 0.2 },
-    });
-
     const volumeSeries = chart.addHistogramSeries({
       color: '#26a69a',
       priceFormat: { type: 'volume' },
       priceScaleId: '',
-    });
+    })
 
     volumeSeries.priceScale().applyOptions({
       scaleMargins: { top: 0.8, bottom: 0 },
-    });
+    })
+
+    chartRef.current = chart
+    candlestickSeriesRef.current = candlestickSeries
+    // Save volume series in a ref too
+    chart.volumeSeries = volumeSeries
+
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries.length === 0 || !chartRef.current) return
+      const { width, height } = entries[0].contentRect
+      chartRef.current.resize(width, height)
+    })
+    resizeObserver.observe(chartContainerRef.current)
+
+    // Chart Crosshair Move
+    chart.subscribeCrosshairMove(param => {
+      if (!legendRef.current) return
+      if (!param.point || !param.time || param.point.x < 0 || param.point.x > chartContainerRef.current.clientWidth || param.point.y < 0 || param.point.y > chartContainerRef.current.clientHeight) {
+        legendRef.current.style.display = 'none'
+        return
+      }
+      legendRef.current.style.display = 'block'
+      const ohlc = param.seriesData.get(candlestickSeries)
+      if (ohlc) {
+        const color = ohlc.close >= ohlc.open ? 'text-emerald-400' : 'text-rose-400'
+        legendRef.current.innerHTML = `<div class="flex gap-4">
+            <div>O: <span class="${color}">${ohlc.open.toFixed(2)}</span></div>
+            <div>H: <span class="${color}">${ohlc.high.toFixed(2)}</span></div>
+            <div>L: <span class="${color}">${ohlc.low.toFixed(2)}</span></div>
+            <div>C: <span class="${color}">${ohlc.close.toFixed(2)}</span></div>
+          </div>`
+      }
+    })
+
+    return () => {
+      resizeObserver.disconnect()
+      if (chartRef.current) chartRef.current.remove()
+      chartRef.current = null
+    }
+  }, []) // Only create once
+
+  // Update Data and Indicators
+  useEffect(() => {
+    if (!chartRef.current || !ohlcData?.data) return
+
+    const candlestickSeries = candlestickSeriesRef.current
+    const volumeSeries = chartRef.current.volumeSeries
 
     const data = ohlcData.data || []
     const chartData = []
@@ -78,7 +146,7 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
     data.forEach(item => {
       let time
       const dateVal = item.date
-      if (interval === 'hour') {
+      if (interval === 'hour' || interval === '15minute' || interval === '5minute') {
         time = dateVal instanceof Date ? Math.floor(dateVal.getTime() / 1000) : Math.floor(new Date(dateVal).getTime() / 1000)
       } else {
         time = typeof dateVal === 'string' ? dateVal.split('T')[0] : dateVal.toISOString().split('T')[0]
@@ -105,63 +173,55 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
     })
 
     const sortData = (a, b) => (typeof a.time === 'string' ? a.time.localeCompare(b.time) : a.time - b.time)
-    const cleanChartData = chartData.filter(item => item && item.time).sort(sortData)
-    const cleanVolumeData = volumeData.filter(item => item && item.time).sort(sortData)
 
-    if (cleanChartData.length > 0) candlestickSeries.setData(cleanChartData)
-    if (cleanVolumeData.length > 0) volumeSeries.setData(cleanVolumeData)
+    // Deduplicate
+    const uniqueChartData = Array.from(
+      chartData.reduce((map, item) => map.set(item.time, item), new Map()).values()
+    ).sort(sortData);
 
-    if (cleanChartData.length >= 20 && indicators?.sma_20) {
-      const smaData = cleanChartData.slice(19).map((_, i) => ({
-        time: cleanChartData[i + 19].time,
-        value: cleanChartData.slice(i, i + 20).reduce((s, x) => s + x.close, 0) / 20
-      }))
-      const smaSeries = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, title: 'SMA 20' })
-      smaSeries.setData(smaData)
+    const uniqueVolumeData = Array.from(
+      volumeData.reduce((map, item) => map.set(item.time, item), new Map()).values()
+    ).sort(sortData);
+
+    if (uniqueChartData.length > 0) candlestickSeries.setData(uniqueChartData)
+    if (uniqueVolumeData.length > 0) volumeSeries.setData(uniqueVolumeData)
+
+    // Fit content on data change
+    chartRef.current.timeScale().fitContent()
+
+    // Render Moving Averages
+    // Clear old MA series
+    Object.values(maSeriesRefs.current).forEach(s => chartRef.current.removeSeries(s))
+    maSeriesRefs.current = {}
+
+    if (indicators?.moving_averages) {
+      maConfig.forEach(ma => {
+        if (!ma.enabled) return
+
+        const key = `${ma.type.toUpperCase()}_${ma.period}`
+        const maData = indicators.moving_averages[key]
+
+        if (maData && maData.length === ohlcData.data.length) {
+          const formattedMaData = maData.map((val, idx) => ({
+            time: uniqueChartData[idx]?.time,
+            value: val
+          })).filter(d => d && d.value !== null && d.time)
+
+          if (formattedMaData.length > 0) {
+            const series = chartRef.current.addLineSeries({
+              color: ma.color,
+              lineWidth: ma.width,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: `${ma.period} ${ma.type}`
+            })
+            series.setData(formattedMaData)
+            maSeriesRefs.current[key] = series
+          }
+        }
+      })
     }
-
-    if (cleanChartData.length >= 50 && indicators?.sma_50) {
-      const smaData = cleanChartData.slice(49).map((_, i) => ({
-        time: cleanChartData[i + 49].time,
-        value: cleanChartData.slice(i, i + 50).reduce((s, x) => s + x.close, 0) / 50
-      }))
-      const smaSeries = chart.addLineSeries({ color: '#f59e0b', lineWidth: 2, title: 'SMA 50' })
-      smaSeries.setData(smaData)
-    }
-
-    chart.subscribeCrosshairMove(param => {
-      if (!legendRef.current) return;
-      if (!param.point || !param.time || param.point.x < 0 || param.point.x > chartContainerRef.current.clientWidth || param.point.y < 0 || param.point.y > chartContainerRef.current.clientHeight) {
-        legendRef.current.style.display = 'none';
-        return;
-      }
-      legendRef.current.style.display = 'block';
-      const ohlc = param.seriesData.get(candlestickSeries);
-      if (ohlc) {
-        const color = ohlc.close >= ohlc.open ? 'text-emerald-400' : 'text-rose-400';
-        legendRef.current.innerHTML = `<div class="flex gap-4">
-            <div>O: <span class="${color}">${ohlc.open.toFixed(2)}</span></div>
-            <div>H: <span class="${color}">${ohlc.high.toFixed(2)}</span></div>
-            <div>L: <span class="${color}">${ohlc.low.toFixed(2)}</span></div>
-            <div>C: <span class="${color}">${ohlc.close.toFixed(2)}</span></div>
-          </div>`;
-      }
-    });
-
-    // Use ResizeObserver for perfect fit
-    const resizeObserver = new ResizeObserver(entries => {
-      if (entries.length === 0 || !chartRef.current) return;
-      const { width, height } = entries[0].contentRect;
-      chartRef.current.resize(width, height);
-    });
-
-    resizeObserver.observe(chartContainerRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-      if (chartRef.current) chartRef.current.remove()
-    }
-  }, [ohlcData, indicators, isMaximized]) // Dependency on isMaximized for re-mount in different layout
+  }, [ohlcData, indicators, maConfig]) // Re-run when data or config changes
 
   if (!indicators || !quote) return null
 
@@ -173,21 +233,46 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
       ? 'fixed inset-0 z-[110] bg-slate-950 flex flex-col p-4 md:p-6'
       : 'bg-slate-900/50 border border-slate-800 rounded-2xl shadow-xl p-6 backdrop-blur-sm'
       }`}>
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-          </svg>
-          Technical {isMaximized ? `Analysis - ${symbol}` : 'Analysis'}
-        </h2>
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4 flex-shrink-0">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+            </svg>
+            Technical {isMaximized ? `Analysis - ${symbol}` : 'Analysis'}
+            {loading && <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />}
+          </h2>
+          {/* We need to pass 'loading' prop from App.jsx to StockChart */}
+          <QuickMAToggles
+            movingAverages={maConfig}
+            onToggle={handleToggleMA}
+          />
+        </div>
 
         <div className="flex items-center gap-3">
-          {isMaximized && (
-            <div className="hidden lg:flex items-center gap-4 px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono">
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> SMA 20: ₹{indicators.sma_20?.toFixed(2)}</div>
-              {indicators.sma_50 && <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500"></span> SMA 50: ₹{indicators.sma_50?.toFixed(2)}</div>}
+          <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+            <div className="pl-3 py-1.5 text-slate-500">
+              {['day', 'week'].includes(ohlcData.interval) ? <Calendar className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
             </div>
-          )}
+            <select
+              value={ohlcData.interval || 'day'}
+              onChange={(e) => onTimeframeChange(e.target.value)}
+              className="bg-transparent text-slate-200 text-sm font-medium pl-2 pr-3 py-1.5 focus:outline-none cursor-pointer"
+            >
+              <option value="day">Daily</option>
+              <option value="week">Weekly</option>
+              <option value="hour">Hourly</option>
+              <option value="15minute">15m</option>
+              <option value="5minute">5m</option>
+            </select>
+          </div>
+
+          <ChartSettings
+            symbol={symbol}
+            timeframe={ohlcData.interval || 'day'}
+            onConfigChange={setMAConfig}
+          />
+
           <button
             onClick={onToggleMaximize}
             className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 shadow-lg"
@@ -208,12 +293,12 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
 
       {/* Candlestick Chart with Legend */}
       <div
-        className={`relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950 transition-all duration-300 ${isMaximized ? 'flex-1' : 'mb-8 h-[400px]'}`}
+        className={`relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950 transition-all duration-300 ${isMaximized ? 'flex-1' : 'mb-8 h-[450px]'}`}
       >
         <div ref={chartContainerRef} className="w-full h-full" />
         <div
           ref={legendRef}
-          className="absolute top-3 left-3 z-[20] font-mono text-sm pointer-events-none p-2 rounded bg-slate-900/90 border border-slate-700 text-slate-300 shadow-xl"
+          className="absolute top-3 left-3 z-[20] font-mono text-xs pointer-events-none p-2 rounded bg-slate-900/90 border border-slate-700 text-slate-300 shadow-xl"
           style={{ display: 'none' }}
         >
           {/* Content will be injected here */}
@@ -226,22 +311,15 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition-colors">
             <h3 className="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">Moving Averages</h3>
             <div className="space-y-1 text-sm font-mono">
-              <div className="flex justify-between">
-                <span className="text-slate-500">20-day SMA:</span>
-                <span className="font-bold text-blue-400">₹{indicators.sma_20?.toFixed(2) || 'N/A'}</span>
-              </div>
-              {indicators.sma_50 && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">50-day SMA:</span>
-                  <span className="font-bold text-amber-500">₹{indicators.sma_50.toFixed(2)}</span>
+              {maConfig.filter(ma => ma.enabled).slice(0, 3).map((ma, idx) => (
+                <div key={idx} className="flex justify-between">
+                  <span className="text-slate-500">{ma.period} {ma.type}:</span>
+                  <span className="font-bold" style={{ color: ma.color }}>
+                    ₹{indicators.moving_averages[`${ma.type.toUpperCase()}_${ma.period}`]?.slice(-1)[0]?.toFixed(2) || 'N/A'}
+                  </span>
                 </div>
-              )}
-              {indicators.sma_200 && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">200-day SMA:</span>
-                  <span className="font-bold text-purple-400">₹{indicators.sma_200.toFixed(2)}</span>
-                </div>
-              )}
+              ))}
+              {maConfig.filter(ma => ma.enabled).length === 0 && <span className="text-slate-600 text-xs italic">No MAs enabled</span>}
             </div>
           </div>
 

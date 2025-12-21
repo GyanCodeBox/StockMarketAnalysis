@@ -173,6 +173,8 @@ function StockInput({ onAnalyze, loading }) {
             <option value="day">Daily</option>
             <option value="week">Weekly</option>
             <option value="hour">Hourly</option>
+            <option value="15minute">15 Minutes</option>
+            <option value="5minute">5 Minutes</option>
           </select>
         </div>
 

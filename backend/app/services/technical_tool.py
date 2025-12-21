@@ -2,7 +2,7 @@
 Technical indicators calculator
 """
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import statistics
 
 logger = logging.getLogger(__name__)
@@ -11,32 +11,37 @@ logger = logging.getLogger(__name__)
 class TechnicalTool:
     """Service for calculating technical indicators"""
     
-    def calculate_indicators(self, ohlc_data: Dict[str, Any], current_price: float) -> Dict[str, Any]:
+    def calculate_indicators(self, ohlc_data: Dict[str, Any], current_price: float, ma_configs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Calculate technical indicators from OHLC data
         
         Args:
             ohlc_data: Dictionary containing historical OHLC data
             current_price: Current stock price
+            ma_configs: Custom MA configurations [{"type": "SMA", "period": 50}, ...]
             
         Returns:
             Dictionary with calculated indicators
         """
         try:
+            from app.utils.indicators import TechnicalIndicators
             data = ohlc_data.get("data", [])
             
             if not data:
                 raise ValueError("No OHLC data available")
             
-            # Log first item to debug data structure
-            if data:
-                logger.debug(f"First data item sample: {data[0]}")
-                logger.debug(f"Data type: {type(data[0])}, Keys: {data[0].keys() if isinstance(data[0], dict) else 'Not a dict'}")
-            
-            # Sort data by date to ensure chronological order (oldest to newest)
-            # Kite API returns data in chronological order, but we'll sort to be safe
-            # Handle both datetime objects and date strings
+            # Sort and extract prices (existing logic...)
             if isinstance(data[0], dict) and "date" in data[0]:
+                # Deduplicate by date
+                unique_data = {}
+                for item in data:
+                    d = item.get("date")
+                    if d:
+                        # Use string representation of date for mapping
+                        d_str = d.isoformat() if hasattr(d, 'isoformat') else str(d)
+                        unique_data[d_str] = item
+                data = list(unique_data.values())
+                
                 def get_date_key(item):
                     date_val = item.get("date")
                     if hasattr(date_val, 'isoformat'):  # datetime object
@@ -44,68 +49,29 @@ class TechnicalTool:
                     return str(date_val)
                 data = sorted(data, key=get_date_key)
             
-            # Extract price arrays (now in chronological order)
-            # Kite API uses lowercase keys: open, high, low, close, volume
-            closes = []
-            highs = []
-            lows = []
-            volumes = []
-            
+            closes, highs, lows, volumes = [], [], [], []
             for item in data:
-                if not isinstance(item, dict):
-                    continue
-                
-                # Try both lowercase and title case (for compatibility)
-                close_val = item.get("close") or item.get("Close") or item.get("CLOSE")
-                high_val = item.get("high") or item.get("High") or item.get("HIGH")
-                low_val = item.get("low") or item.get("Low") or item.get("LOW")
-                volume_val = item.get("volume") or item.get("Volume") or item.get("VOLUME")
-                
-                if close_val is not None:
-                    try:
-                        closes.append(float(close_val))
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid close price: {close_val}")
-                
-                if high_val is not None:
-                    try:
-                        highs.append(float(high_val))
-                    except (ValueError, TypeError):
-                        pass
-                
-                if low_val is not None:
-                    try:
-                        lows.append(float(low_val))
-                    except (ValueError, TypeError):
-                        pass
-                
-                if volume_val is not None:
-                    try:
-                        volumes.append(float(volume_val))
-                    except (ValueError, TypeError):
-                        pass
+                if not isinstance(item, dict): continue
+                c = item.get("close") or item.get("Close"); h = item.get("high") or item.get("High")
+                l = item.get("low") or item.get("Low"); v = item.get("volume") or item.get("Volume")
+                if c is not None: closes.append(float(c))
+                if h is not None: highs.append(float(h))
+                if l is not None: lows.append(float(l))
+                if v is not None: volumes.append(float(v))
             
-            logger.info(f"Extracted {len(closes)} closing prices, {len(highs)} highs, {len(lows)} lows")
+            # Dynamic MA Calculation
+            if not ma_configs:
+                # Default MAs if none provided
+                ma_configs = [
+                    {"type": "SMA", "period": 20},
+                    {"type": "SMA", "period": 50},
+                    {"type": "SMA", "period": 200}
+                ]
             
-            if not closes:
-                raise ValueError("No valid close prices found in OHLC data")
-            
-            # Ensure all arrays have same length (use closes as reference)
-            min_length = len(closes)
-            if len(highs) != min_length:
-                logger.warning(f"Highs count ({len(highs)}) doesn't match closes ({min_length})")
-                highs = highs[:min_length] if len(highs) > min_length else highs + [0] * (min_length - len(highs))
-            if len(lows) != min_length:
-                logger.warning(f"Lows count ({len(lows)}) doesn't match closes ({min_length})")
-                lows = lows[:min_length] if len(lows) > min_length else lows + [0] * (min_length - len(lows))
-            if len(volumes) != min_length:
-                logger.warning(f"Volumes count ({len(volumes)}) doesn't match closes ({min_length})")
-                volumes = volumes[:min_length] if len(volumes) > min_length else volumes + [0] * (min_length - len(volumes))
+            ma_results = TechnicalIndicators.calculate_all_mas(closes, ma_configs)
             
             indicators = {
-                "sma_20": self._calculate_sma(closes, 20),
-                "sma_50": self._calculate_sma(closes, 50) if len(closes) >= 50 else None,
-                "sma_200": self._calculate_sma(closes, 200) if len(closes) >= 200 else None,
+                "moving_averages": ma_results,
                 "support_levels": self._calculate_support_levels(lows),
                 "resistance_levels": self._calculate_resistance_levels(highs),
                 "volume_analysis": self._analyze_volume(volumes),
@@ -113,6 +79,13 @@ class TechnicalTool:
                 "price_trend": self._determine_trend(closes),
                 "volatility": self._calculate_volatility(closes)
             }
+            
+            # Backward compatibility for sma_20, sma_50, sma_200 (optional but helpful)
+            indicators["sma_20"] = ma_results.get("SMA_20", [None])[-1]
+            indicators["sma_50"] = ma_results.get("SMA_50", [None])[-1]
+            indicators["sma_200"] = ma_results.get("SMA_200", [None])[-1]
+            
+            return indicators
             
             return indicators
             

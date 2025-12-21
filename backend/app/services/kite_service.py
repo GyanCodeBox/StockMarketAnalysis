@@ -138,8 +138,16 @@ class KiteService:
         kite_interval = "day"
         if interval == "hour":
             kite_interval = "60minute"  # Kite 60min interval
+        elif interval == "15minute":
+            kite_interval = "15minute"
+        elif interval == "5minute":
+            kite_interval = "5minute"
         elif interval == "week":
             kite_interval = "day"  # We fetch daily and resample
+            
+        # Ensure we fetch enough days for 200-period MAs if timeframe is short
+        if interval in ["hour", "15minute", "5minute"] and days < 60:
+            days = 60 # Fetch at least 60 days for intraday to get enough data points
             
         if self.kite:
             try:
