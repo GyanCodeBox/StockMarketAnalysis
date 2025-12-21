@@ -416,7 +416,7 @@ class KiteService:
         return {
             "symbol": symbol,
             "exchange": exchange,
-            "data": data,
+            "data": ohlc_data,
             "from_date": (datetime.now() - timedelta(days=days)).isoformat(),
             "to_date": datetime.now().isoformat()
         }

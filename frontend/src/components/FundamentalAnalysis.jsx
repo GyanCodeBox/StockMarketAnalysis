@@ -26,7 +26,7 @@ const FundamentalAnalysis = ({ symbol, exchange }) => {
     const requestParams = { symbol, exchange };
 
     return (
-        <div className="space-y-6 animate-fade-in-up">
+        <div id="fundamental-section" className="space-y-6 animate-fade-in-up">
             {/* Page Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                 <div>
