@@ -70,6 +70,29 @@ class TechnicalTool:
             
             ma_results = TechnicalIndicators.calculate_all_mas(closes, ma_configs)
             
+            # Calculate Technical Score
+            from app.services.technical_scoring import TechnicalScorer
+            scorer = TechnicalScorer()
+            
+            # Determine timeframe from usage or data interval?
+            # ohlc_data['interval'] exists from kite_service
+            timeframe = ohlc_data.get("interval", "day")
+            
+            # Extract latest MA values for scoring (convert List to float)
+            ma_snapshot = {}
+            for k, v in ma_results.items():
+                if v and isinstance(v, list) and len(v) > 0:
+                    ma_snapshot[k] = v[-1]
+                else:
+                    ma_snapshot[k] = 0.0
+            
+            technical_score = scorer.calculate_score(
+                current_price=current_price,
+                ma_data=ma_snapshot, # Use snapshot with single float values
+                ohlc_data=data,
+                timeframe=timeframe
+            )
+            
             indicators = {
                 "moving_averages": ma_results,
                 "support_levels": self._calculate_support_levels(lows),
@@ -77,7 +100,8 @@ class TechnicalTool:
                 "volume_analysis": self._analyze_volume(volumes),
                 "current_price": current_price,
                 "price_trend": self._determine_trend(closes),
-                "volatility": self._calculate_volatility(closes)
+                "volatility": self._calculate_volatility(closes),
+                "technical_score": technical_score
             }
             
             # Backward compatibility for sma_20, sma_50, sma_200 (optional but helpful)

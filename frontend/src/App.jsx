@@ -5,6 +5,7 @@ import StockChart from './components/StockChart'
 import AIAnalysisDisplay from './components/AIAnalysisDisplay'
 import FundamentalAnalysis from './components/FundamentalAnalysis'
 import LoadingAnimation from './components/LoadingAnimation'
+import TechnicalScoreCard from './components/TechnicalScoreCard'
 import LazyAccordionSection from './components/LazyAccordionSection'
 import ScrollNavigation from './components/ScrollNavigation'
 import { TIMEFRAME_DEFAULTS } from './components/ChartSettings'
@@ -46,7 +47,7 @@ function App() {
 
     // Load saved MA config for this symbol/timeframe if it exists
     let moving_averages = null;
-    const savedPrefs = localStorage.getItem(`chart_prefs_${symbolValue}_${timeframe}`);
+    const savedPrefs = localStorage.getItem(`chart_prefs_${symbolValue}_${timeframe} `);
     if (savedPrefs) {
       try {
         const prefs = JSON.parse(savedPrefs);
@@ -149,19 +150,19 @@ function App() {
               <div className="flex space-x-4 mb-6">
                 <button
                   onClick={() => setActiveTab('technical')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'technical'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
+                  className={`px - 4 py - 2 rounded - lg font - medium transition - all ${activeTab === 'technical'
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    } `}
                 >
                   Technical Analysis
                 </button>
                 <button
                   onClick={() => setActiveTab('fundamental')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'fundamental'
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
+                  className={`px - 4 py - 2 rounded - lg font - medium transition - all ${activeTab === 'fundamental'
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    } `}
                 >
                   Fundamental Analysis
                 </button>
@@ -170,19 +171,26 @@ function App() {
 
             {/* Content Views */}
             {activeTab === 'technical' ? (
-              <div id="technical-section" className={`space-y-6 ${isChartMaximized ? "" : "animate-fade-in-up"}`}>
-                {/* Chart */}
-                {techData.indicators && (
-                  <StockChart
-                    symbol={techData.symbol}
-                    quote={techData.quote}
-                    ohlcData={techData.ohlc_data}
-                    indicators={techData.indicators}
-                    isMaximized={isChartMaximized}
-                    onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
-                    onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
-                    loading={loading}
-                  />
+              <div id="technical-section" className={`space - y - 6 ${isChartMaximized ? "" : "animate-fade-in"} `}>
+                {/* Technical Score Card */}
+                {techData.indicators?.technical_score && (
+                  <TechnicalScoreCard scoreData={techData.indicators.technical_score} />
+                )}
+
+                {/* Chart Section */}
+                {!isChartMaximized && (
+                  <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-2xl overflow-hidden">
+                    <StockChart
+                      symbol={techData.symbol}
+                      quote={techData.quote}
+                      ohlcData={techData.ohlc_data}
+                      indicators={techData.indicators}
+                      isMaximized={isChartMaximized}
+                      onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
+                      onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
+                      loading={loading}
+                    />
+                  </div>
                 )}
 
                 {/* Lazy AI Market Intelligence */}
