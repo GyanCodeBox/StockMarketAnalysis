@@ -4,7 +4,7 @@ import ChartSettings, { TIMEFRAME_DEFAULTS } from './ChartSettings'
 import QuickMAToggles from './QuickMAToggles'
 import { Calendar, Clock, Loader2 } from 'lucide-react'
 
-function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggleMaximize, onTimeframeChange, loading }) {
+function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh }) {
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
@@ -307,6 +307,20 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
             timeframe={ohlcData.interval || 'day'}
             onConfigChange={setMAConfig}
           />
+
+          {/* Refresh Button */}
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh latest data"
+            >
+              <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          )}
 
           {/* Zoom Controls */}
           <div className="flex items-center gap-1 bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">

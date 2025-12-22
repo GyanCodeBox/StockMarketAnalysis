@@ -184,6 +184,17 @@ class KiteService:
                     )
                     
                     if historical_data:
+                        # Convert timestamps to IST for intraday data
+                        if interval in ['hour', '15minute', '5minute']:
+                            from pytz import timezone
+                            ist = timezone('Asia/Kolkata')
+                            for item in historical_data:
+                                if isinstance(item.get('date'), datetime):
+                                    # Convert UTC to IST
+                                    utc_time = item['date'].replace(tzinfo=timezone('UTC'))
+                                    ist_time = utc_time.astimezone(ist)
+                                    item['date'] = ist_time
+                        
                         # Resample to weekly if requested
                         if interval == "week":
                             historical_data = self._resample_to_weekly(historical_data)

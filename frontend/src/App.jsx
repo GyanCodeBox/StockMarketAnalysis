@@ -188,6 +188,7 @@ function App() {
                     onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
                     onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
                     loading={loading}
+                    onRefresh={() => handleAnalyze(symbol, exchange, techData.ohlc_data.interval)}
                   />
                 </div>
 
