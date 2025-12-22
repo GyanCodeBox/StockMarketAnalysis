@@ -49,6 +49,41 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
     }
   }, [isMaximized])
 
+  // Zoom handlers
+  const handleZoomIn = useCallback(() => {
+    if (chartRef.current) {
+      const timeScale = chartRef.current.timeScale();
+      const range = timeScale.getVisibleLogicalRange();
+      if (range) {
+        const delta = (range.to - range.from) * 0.2; // Zoom in by 20%
+        timeScale.setVisibleLogicalRange({
+          from: range.from + delta / 2,
+          to: range.to - delta / 2
+        });
+      }
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (chartRef.current) {
+      const timeScale = chartRef.current.timeScale();
+      const range = timeScale.getVisibleLogicalRange();
+      if (range) {
+        const delta = (range.to - range.from) * 0.25; // Zoom out by 25%
+        timeScale.setVisibleLogicalRange({
+          from: Math.max(0, range.from - delta / 2),
+          to: range.to + delta / 2
+        });
+      }
+    }
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    if (chartRef.current) {
+      chartRef.current.timeScale().resetTimeScale();
+    }
+  }, []);
+
   // Initialize Chart
   useEffect(() => {
     if (!chartContainerRef.current) return
@@ -272,6 +307,39 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
             timeframe={ohlcData.interval || 'day'}
             onConfigChange={setMAConfig}
           />
+
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-1 bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+            <button
+              onClick={handleZoomIn}
+              className="p-2 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+              title="Zoom In"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+              </svg>
+            </button>
+            <div className="w-px h-4 bg-slate-700"></div>
+            <button
+              onClick={handleZoomOut}
+              className="p-2 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+              title="Zoom Out"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+              </svg>
+            </button>
+            <div className="w-px h-4 bg-slate-700"></div>
+            <button
+              onClick={handleResetZoom}
+              className="p-2 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+              title="Reset Zoom"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
 
           <button
             onClick={onToggleMaximize}

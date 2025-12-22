@@ -151,8 +151,8 @@ function App() {
                 <button
                   onClick={() => setActiveTab('technical')}
                   className={`px - 4 py - 2 rounded - lg font - medium transition - all ${activeTab === 'technical'
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     } `}
                 >
                   Technical Analysis
@@ -160,8 +160,8 @@ function App() {
                 <button
                   onClick={() => setActiveTab('fundamental')}
                   className={`px - 4 py - 2 rounded - lg font - medium transition - all ${activeTab === 'fundamental'
-                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     } `}
                 >
                   Fundamental Analysis
@@ -178,20 +178,18 @@ function App() {
                 )}
 
                 {/* Chart Section */}
-                {!isChartMaximized && (
-                  <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-2xl overflow-hidden">
-                    <StockChart
-                      symbol={techData.symbol}
-                      quote={techData.quote}
-                      ohlcData={techData.ohlc_data}
-                      indicators={techData.indicators}
-                      isMaximized={isChartMaximized}
-                      onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
-                      onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
-                      loading={loading}
-                    />
-                  </div>
-                )}
+                <div className={isChartMaximized ? "" : "bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-2xl overflow-hidden"}>
+                  <StockChart
+                    symbol={techData.symbol}
+                    quote={techData.quote}
+                    ohlcData={techData.ohlc_data}
+                    indicators={techData.indicators}
+                    isMaximized={isChartMaximized}
+                    onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
+                    onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
+                    loading={loading}
+                  />
+                </div>
 
                 {/* Lazy AI Market Intelligence */}
                 <div id="ai-section" className="mt-8 pt-4 border-t border-slate-800/50">

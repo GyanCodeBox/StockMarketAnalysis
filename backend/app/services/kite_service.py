@@ -133,6 +133,19 @@ class KiteService:
         """
         instrument = f"{exchange}:{symbol}"
         to_date = datetime.now()
+        # Determine how many days of historical data to fetch based on interval
+        if interval == 'week':
+            days = 1095  # 3 years for weekly data
+        elif interval == 'day':
+            days = 1095  # 3 years for daily data
+        elif interval == 'hour':
+            days = 100  # ~100 days for hourly (enough for chart + MAs)
+        elif interval == '15minute':
+            days = 30  # 30 days for 15-minute
+        elif interval == '5minute':
+            days = 10  # 10 days for 5-minute
+        else:
+            days = 1095  # Default to 3 years
         from_date = to_date - timedelta(days=days)
         
         kite_interval = "day"
