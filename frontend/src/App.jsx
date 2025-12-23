@@ -184,6 +184,7 @@ function App() {
                     quote={techData.quote}
                     ohlcData={techData.ohlc_data}
                     indicators={techData.indicators}
+                    accumulationZones={techData.accumulation_zones}
                     isMaximized={isChartMaximized}
                     onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
                     onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}

@@ -4,6 +4,7 @@ LangGraph agent nodes - individual steps in the state machine
 from app.agent.state import AgentState
 from app.services.kite_service import KiteService
 from app.services.technical_tool import TechnicalTool
+from app.services.accumulation_zone_service import AccumulationZoneService
 from app.tools.fundamental_tool import FundamentalTool
 from app.services.llm_service import LLMService
 import logging
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 # Initialize services
 kite_service = KiteService()
 technical_tool = TechnicalTool()
+accumulation_service = AccumulationZoneService()
 fundamental_tool = FundamentalTool()
 llm_service = LLMService()
 
@@ -114,6 +116,15 @@ async def calc_indicators_node(state: AgentState) -> AgentState:
         )
         
         state["indicators"] = indicators
+        try:
+            state["accumulation_zones"] = accumulation_service.detect_zones(
+                ohlc_data,
+                lookback=60,
+                trend_context="downtrend" if indicators.get("price_trend") == "bearish" else "unknown",
+            )
+        except Exception as zone_err:
+            logger.warning(f"Accumulation zone detection failed: {zone_err}")
+            state["accumulation_zones"] = []
         state["status"] = "indicators_calculated"
         
     except Exception as e:

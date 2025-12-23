@@ -1,22 +1,41 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, ColorType } from 'lightweight-charts'
 import ChartSettings, { TIMEFRAME_DEFAULTS } from './ChartSettings'
 import QuickMAToggles from './QuickMAToggles'
 import { Calendar, Clock, Loader2 } from 'lucide-react'
 
-function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh }) {
+function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh }) {
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
   const legendRef = useRef(null)
   const maSeriesRefs = useRef({})
+  const volumeLookupRef = useRef(new Map())
+  const lastHoverCandleRef = useRef(null)
+  const explainedCandleTimeRef = useRef(null)
 
   const [maConfig, setMAConfig] = useState([])
+  const [explainState, setExplainState] = useState({
+    loading: false,
+    data: null,
+    error: null,
+  })
+  const [showExplain, setShowExplain] = useState(false)
+  const [showZones, setShowZones] = useState(true)
+  const [zoneOverlays, setZoneOverlays] = useState([])
+  const [hoverZone, setHoverZone] = useState(null)
+  const [selectedZone, setSelectedZone] = useState(null)
 
   // Load initial MA config from local storage or use defaults
   useEffect(() => {
     const timeframe = ohlcData?.interval || 'day'
     const savedPrefs = localStorage.getItem(`chart_prefs_${symbol}_${timeframe}`)
+    const savedZonePref = localStorage.getItem(`accum_zones_${symbol}_${timeframe}`)
+    if (savedZonePref !== null) {
+      setShowZones(savedZonePref === 'true')
+    } else {
+      setShowZones(true)
+    }
     if (savedPrefs) {
       try {
         setMAConfig(JSON.parse(savedPrefs))
@@ -36,6 +55,17 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
     const timeframe = ohlcData?.interval || 'day'
     localStorage.setItem(`chart_prefs_${symbol}_${timeframe}`, JSON.stringify(updated))
   }, [maConfig, symbol, ohlcData?.interval])
+
+  const handleToggleZones = useCallback(() => {
+    const timeframe = ohlcData?.interval || 'day'
+    const next = !showZones
+    setShowZones(next)
+    localStorage.setItem(`accum_zones_${symbol}_${timeframe}`, String(next))
+    if (!next) {
+      setZoneOverlays([])
+      setSelectedZone(null)
+    }
+  }, [ohlcData?.interval, showZones, symbol])
 
   // Handle body scroll lock
   useEffect(() => {
@@ -156,6 +186,13 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
             <div>L: <span class="${color}">${ohlc.low.toFixed(2)}</span></div>
             <div>C: <span class="${color}">${ohlc.close.toFixed(2)}</span></div>
           </div>`
+
+        // Store last hover candle for explain-on-right-click
+        const vol = volumeLookupRef.current.get(ohlc.time)
+        lastHoverCandleRef.current = {
+          ...ohlc,
+          volume: vol,
+        }
       }
     })
 
@@ -165,6 +202,81 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
       chartRef.current = null
     }
   }, []) // Only create once
+
+  const computeZoneOverlays = useCallback(() => {
+    if (!chartRef.current || !candlestickSeriesRef.current || !showZones || !accumulationZones?.length) {
+      setZoneOverlays([])
+      return
+    }
+    const timeScale = chartRef.current.timeScale()
+    const priceScale = candlestickSeriesRef.current.priceScale()
+    if (!timeScale || !priceScale || typeof candlestickSeriesRef.current.priceToCoordinate !== 'function') {
+      setZoneOverlays([])
+      return
+    }
+    const normalizeZoneTime = (val) => {
+      const intraday = (ohlcData?.interval === 'hour' || ohlcData?.interval === '15minute' || ohlcData?.interval === '5minute')
+      if (!val) return null
+      if (intraday) {
+        const d = val instanceof Date ? val : new Date(val)
+        if (isNaN(d)) return null
+        return Math.floor(d.getTime() / 1000)
+      }
+      if (typeof val === 'string') {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val
+        const parsed = new Date(val)
+        if (!isNaN(parsed)) return parsed.toISOString().slice(0, 10)
+        if (val.includes('T')) return val.split('T')[0]
+        return null
+      }
+      if (val instanceof Date) return val.toISOString().slice(0, 10)
+      return null
+    }
+    const overlays = []
+    accumulationZones.forEach((zone) => {
+      const start = normalizeZoneTime(zone.start_time)
+      const end = normalizeZoneTime(zone.end_time)
+      if (!start || !end) return
+      const x1 = timeScale.timeToCoordinate(start)
+      const x2 = timeScale.timeToCoordinate(end)
+      const yHigh = candlestickSeriesRef.current.priceToCoordinate(zone.zone_high)
+      const yLow = candlestickSeriesRef.current.priceToCoordinate(zone.zone_low)
+      if (x1 == null || x2 == null || yHigh == null || yLow == null) return
+      const left = Math.min(x1, x2)
+      const width = Math.abs(x2 - x1)
+      const top = Math.min(yHigh, yLow)
+      const height = Math.abs(yLow - yHigh)
+      overlays.push({
+        id: `${zone.start_time}-${zone.end_time}`,
+        left,
+        width,
+        top,
+        height,
+        zone
+      })
+    })
+    setZoneOverlays(overlays)
+  }, [accumulationZones, showZones])
+
+  useEffect(() => {
+    computeZoneOverlays()
+  }, [computeZoneOverlays, accumulationZones])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    const handler = () => computeZoneOverlays()
+    const timeScale = chart.timeScale()
+    timeScale.subscribeVisibleTimeRangeChange(handler)
+    return () => {
+      timeScale.unsubscribeVisibleTimeRangeChange(handler)
+    }
+  }, [computeZoneOverlays])
+
+  useEffect(() => {
+    setSelectedZone(null)
+    setHoverZone(null)
+  }, [symbol, ohlcData?.interval])
 
   // Update Data and Indicators
   useEffect(() => {
@@ -177,15 +289,32 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
     const chartData = []
     const volumeData = []
     const interval = ohlcData.interval || 'day'
+    const nextVolumeLookup = new Map()
+
+    const normalizeTime = (dateVal) => {
+      if (!dateVal) return null
+      const intraday = interval === 'hour' || interval === '15minute' || interval === '5minute'
+      if (intraday) {
+        const d = dateVal instanceof Date ? dateVal : new Date(dateVal)
+        if (isNaN(d)) return null
+        return Math.floor(d.getTime() / 1000)
+      }
+      if (typeof dateVal === 'string') {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return dateVal
+        const parsed = new Date(dateVal)
+        if (!isNaN(parsed)) return parsed.toISOString().slice(0, 10)
+        if (dateVal.includes('T')) return dateVal.split('T')[0]
+        return null
+      }
+      if (dateVal instanceof Date) {
+        return dateVal.toISOString().slice(0, 10)
+      }
+      return null
+    }
 
     data.forEach(item => {
-      let time
-      const dateVal = item.date
-      if (interval === 'hour' || interval === '15minute' || interval === '5minute') {
-        time = dateVal instanceof Date ? Math.floor(dateVal.getTime() / 1000) : Math.floor(new Date(dateVal).getTime() / 1000)
-      } else {
-        time = typeof dateVal === 'string' ? dateVal.split('T')[0] : dateVal.toISOString().split('T')[0]
-      }
+      const dateVal = item.date || item.time || item.timestamp
+      const time = normalizeTime(dateVal)
       if (!time) return
 
       const open = parseFloat(item.open || item.Open || 0)
@@ -205,6 +334,8 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
         value: parseFloat(item.volume || item.Volume || 0),
         color: color
       })
+
+      nextVolumeLookup.set(time, parseFloat(item.volume || item.Volume || 0))
     })
 
     const sortData = (a, b) => (typeof a.time === 'string' ? a.time.localeCompare(b.time) : a.time - b.time)
@@ -220,9 +351,12 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
 
     if (uniqueChartData.length > 0) candlestickSeries.setData(uniqueChartData)
     if (uniqueVolumeData.length > 0) volumeSeries.setData(uniqueVolumeData)
+    volumeLookupRef.current = nextVolumeLookup
 
     // Fit content on data change
     chartRef.current.timeScale().fitContent()
+    // Recompute overlays when base data updates
+    computeZoneOverlays()
 
     // Render Moving Averages
     // Clear old MA series
@@ -256,7 +390,126 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
         }
       })
     }
-  }, [ohlcData, indicators, maConfig]) // Re-run when data or config changes
+  }, [ohlcData, indicators, maConfig, computeZoneOverlays]) // Re-run when data or config changes
+
+  const explainCandle = useCallback(async () => {
+    const candle = lastHoverCandleRef.current
+    if (!candle || !indicators) return
+
+    const volumeValue = candle.volume || 0
+    const avgVolume = indicators.volume_analysis?.average_volume || 0
+    let volumeBucket = 'avg'
+    if (avgVolume > 0) {
+      if (volumeValue > avgVolume * 1.2) volumeBucket = 'high'
+      else if (volumeValue < avgVolume * 0.8) volumeBucket = 'low'
+    }
+
+    const priceTrend = indicators.price_trend === 'bullish'
+      ? 'up'
+      : indicators.price_trend === 'bearish'
+        ? 'down'
+        : 'range'
+
+    const toNumber = (val) => {
+      const num = typeof val === 'string' ? Number(val) : val
+      return Number.isFinite(num) ? num : null
+    }
+
+    const supportLevels = (indicators.support_levels || []).map(toNumber).filter(v => v !== null)
+    const resistanceLevels = (indicators.resistance_levels || []).map(toNumber).filter(v => v !== null)
+    const closePrice = candle.close
+
+    const findNearest = (levels) => levels
+      .map(level => ({ level, distance: Math.abs(level - closePrice) }))
+      .sort((a, b) => a.distance - b.distance)[0]
+
+    const nearestSupport = supportLevels.length ? findNearest(supportLevels) : null
+    const nearestResistance = resistanceLevels.length ? findNearest(resistanceLevels) : null
+
+    let nearLevel = 'none'
+    let levelPrice = null
+    const tolerance = Math.max(closePrice * 0.01, 5) // 1% or ₹5
+    if (nearestSupport && nearestSupport.distance <= tolerance) {
+      nearLevel = 'support'
+      levelPrice = nearestSupport.level
+    } else if (nearestResistance && nearestResistance.distance <= tolerance) {
+      nearLevel = 'resistance'
+      levelPrice = nearestResistance.level
+    }
+
+    const payload = {
+      ohlc: {
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      },
+      volume: volumeBucket,
+      trend: priceTrend,
+      near_level: nearLevel,
+      level_price: levelPrice,
+      gap: 'none',
+      news_flag: false,
+      prev_high: null,
+      prev_low: null,
+    }
+
+    setShowExplain(true)
+    explainedCandleTimeRef.current = candle.time
+    setExplainState({ loading: true, data: null, error: null })
+    try {
+      const response = await fetch('/api/explain-candle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+      const data = await response.json()
+      setExplainState({ loading: false, data, error: null })
+    } catch (err) {
+      setExplainState({ loading: false, data: null, error: err.message || 'Failed to explain candle' })
+    }
+  }, [indicators])
+
+  const resetExplain = useCallback(() => {
+    setExplainState({ loading: false, data: null, error: null })
+    setShowExplain(false)
+    explainedCandleTimeRef.current = null
+    if (candlestickSeriesRef.current) {
+      candlestickSeriesRef.current.setMarkers([])
+    }
+  }, [])
+
+  // Highlight explained candle with a marker
+  useEffect(() => {
+    if (!candlestickSeriesRef.current) return
+    const time = explainedCandleTimeRef.current
+    if (!time) {
+      candlestickSeriesRef.current.setMarkers([])
+      return
+    }
+    candlestickSeriesRef.current.setMarkers([
+      {
+        time,
+        position: 'aboveBar',
+        color: '#f59e0b', // amber highlight
+        shape: 'circle',
+        size: 1,
+        text: '★',
+      },
+    ])
+  }, [explainState.data])
+
+  useEffect(() => {
+    const node = chartContainerRef.current
+    if (!node) return
+    const handler = (e) => {
+      e.preventDefault()
+      explainCandle()
+    }
+    node.addEventListener('contextmenu', handler)
+    return () => node.removeEventListener('contextmenu', handler)
+  }, [explainCandle])
 
   if (!indicators || !quote) return null
 
@@ -285,6 +538,16 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleToggleZones}
+            className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${showZones
+              ? 'bg-emerald-900/40 border-emerald-500/40 text-emerald-200 hover:bg-emerald-900/70'
+              : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+              }`}
+            title="Toggle accumulation zones"
+          >
+            Zones: {showZones ? 'On' : 'Off'}
+          </button>
           <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
             <div className="pl-3 py-1.5 text-slate-500">
               {['day', 'week'].includes(ohlcData.interval) ? <Calendar className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
@@ -385,7 +648,185 @@ function StockChart({ symbol, quote, ohlcData, indicators, isMaximized, onToggle
         >
           {/* Content will be injected here */}
         </div>
+
+        {/* Accumulation Zones overlay */}
+        {showZones && zoneOverlays.length > 0 && (
+          <div className="absolute inset-0 z-[15] pointer-events-none">
+            {zoneOverlays.map((rect) => (
+              <div
+                key={rect.id}
+                className="absolute rounded-sm"
+                style={{
+                  left: rect.left,
+                  width: rect.width,
+                  top: rect.top,
+                  height: rect.height || 1,
+                  background: 'linear-gradient(180deg, rgba(59,130,246,0.08), rgba(16,185,129,0.12))',
+                  border: '1px solid rgba(14,165,233,0.35)',
+                  pointerEvents: 'auto',
+                }}
+                onMouseEnter={() => setHoverZone(rect.zone)}
+                onMouseLeave={() => setHoverZone(null)}
+                onClick={() => setSelectedZone(rect.zone)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setSelectedZone(rect.zone)
+                }}
+              />
+            ))}
+            {hoverZone && (
+              <div
+                className="absolute bg-slate-900/95 border border-slate-700 text-xs text-slate-200 px-3 py-2 rounded shadow-xl"
+                style={{
+                  left: '12px',
+                  top: '12px',
+                }}
+              >
+                <div className="font-semibold text-slate-100 flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
+                  Accumulation zone ({hoverZone.confidence})
+                </div>
+                <div className="text-slate-300 mt-1">{hoverZone.summary}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Explain panel */}
+        {(showExplain || explainState.loading || explainState.data) && (
+          <div className="absolute top-3 right-3 z-[21] w-full max-w-md">
+            <div className="bg-slate-900/95 border border-slate-700 rounded-xl shadow-2xl p-4 space-y-3 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                  <span role="img" aria-label="brain">🧠</span> Explain this candle
+                </div>
+                <div className="flex items-center gap-2">
+                  {explainState.loading && <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />}
+                  {!explainState.loading && (
+                    <button
+                      onClick={explainCandle}
+                      className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  )}
+                  <button
+                    onClick={resetExplain}
+                    className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition-colors"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {explainState.error && (
+                <div className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/40 rounded p-2">
+                  {explainState.error}
+                </div>
+              )}
+
+              {!explainState.loading && explainState.data && (
+                <div className="space-y-2 text-sm text-slate-200">
+                  <div className="font-semibold text-slate-100">{explainState.data.summary}</div>
+                  <div className="space-y-1">
+                    <div className="text-xs text-slate-400 uppercase tracking-wide">Context</div>
+                    <ul className="list-disc list-inside text-slate-200 text-sm space-y-0.5">
+                      {explainState.data.context.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-400 uppercase tracking-wide">Interpretation</div>
+                    <div className="text-slate-200">{explainState.data.interpretation}</div>
+                  </div>
+                <div className="h-px bg-slate-800" />
+                <div className="text-[11px] text-slate-400 uppercase tracking-wide">Decision Impact</div>
+                  <div>
+                    <div className="text-xs text-slate-400 uppercase tracking-wide">What to watch</div>
+                    <ul className="list-disc list-inside text-slate-200 text-sm space-y-0.5">
+                      {explainState.data.what_to_watch.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-400 uppercase tracking-wide">Confidence</span>
+                  {(() => {
+                    const level = (explainState.data.confidence || '').toLowerCase()
+                    const colorMap = {
+                      low: 'bg-slate-800 text-slate-300 border-slate-700',
+                      medium: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+                      high: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+                    }
+                    const cls = colorMap[level] || 'bg-slate-800 text-slate-300 border-slate-700'
+                    return (
+                      <span className={`px-2 py-0.5 rounded border ${cls}`}>
+                        {explainState.data.confidence}
+                      </span>
+                    )
+                  })()}
+                  </div>
+                </div>
+              )}
+
+              {!explainState.loading && !explainState.data && !explainState.error && (
+                <div className="text-xs text-slate-400">
+                  Right-click a candle to generate an explanation.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {showZones && selectedZone && (
+        <div className="mb-6 bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
+              Accumulation Zone Detail
+            </div>
+            <div className="text-xs flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded border border-slate-700 text-slate-300">
+                {selectedZone.confidence} confidence
+              </span>
+              <button
+                onClick={() => setSelectedZone(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="text-slate-200 mt-2 font-semibold">{selectedZone.summary}</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 text-sm text-slate-200">
+            <div>
+              <div className="text-xs uppercase text-slate-400 mb-1">Characteristics</div>
+              <ul className="list-disc list-inside space-y-1">
+                {selectedZone.characteristics?.map((c, idx) => <li key={idx}>{c}</li>)}
+              </ul>
+            </div>
+            <div>
+              <div className="text-xs uppercase text-slate-400 mb-1">What to watch</div>
+              <ul className="list-disc list-inside space-y-1">
+                {selectedZone.what_to_watch?.map((c, idx) => <li key={idx}>{c}</li>)}
+              </ul>
+            </div>
+          </div>
+          <div className="mt-3 text-sm text-slate-200">
+            <div className="text-xs uppercase text-slate-400 mb-1">Interpretation</div>
+            <div>{selectedZone.interpretation}</div>
+          </div>
+          <div className="mt-3 text-sm text-slate-200">
+            <div className="text-xs uppercase text-slate-400 mb-1">Failure signals</div>
+            <ul className="list-disc list-inside space-y-1">
+              {selectedZone.failure_signals?.map((c, idx) => <li key={idx}>{c}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Indicators Summary - Hidden in Maximized mode for a cleaner view */}
       {!isMaximized && (

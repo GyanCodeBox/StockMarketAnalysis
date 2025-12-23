@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from app.agent.graph import create_agent
 from app.services.cache import cache_manager
 from app.services.kite_service import KiteService
+from app.services.candle_explainer import CandleExplainer, CandleContext
 
 router = APIRouter()
 kite_service = KiteService()
@@ -28,6 +29,7 @@ class AnalyzeResponse(BaseModel):
     quote: dict
     ohlc_data: Optional[dict] = None  # Historical OHLC data for charting
     indicators: dict
+    accumulation_zones: Optional[list] = None
     fundamental_data: Optional[dict] = None # Fundamental analysis data
     analysis: str
     status: str
@@ -81,6 +83,7 @@ async def analyze_stock(request: AnalyzeRequest):
             "quote": result.get("quote", {}),
             "ohlc_data": result.get("ohlc_data", {}),
             "indicators": result.get("indicators", {}),
+            "accumulation_zones": result.get("accumulation_zones", []),
             "fundamental_data": result.get("fundamental_data"),
             "analysis": result.get("analysis", ""),
             "status": result.get("status", "completed")
@@ -253,12 +256,19 @@ async def analyze_technical(request: AnalyzeRequest):
         
         # 2. Calc indicators
         indicators = tech.calculate_indicators(ohlc, quote.get("last_price", 0), ma_configs=ma_configs)
+        from app.services.accumulation_zone_service import AccumulationZoneService
+        zones = AccumulationZoneService().detect_zones(
+            ohlc,
+            lookback=60,
+            trend_context="downtrend" if indicators.get("price_trend") == "bearish" else "unknown",
+        )
         
         data = {
             "symbol": symbol,
             "quote": quote,
             "ohlc_data": ohlc,
-            "indicators": indicators
+            "indicators": indicators,
+            "accumulation_zones": zones,
         }
         
         cache_manager.set(cache_key, data, ttl_seconds=300) # 5 min for tech
@@ -372,6 +382,33 @@ class SearchResponse(BaseModel):
     count: int
 
 
+class OHLC(BaseModel):
+    open: float
+    high: float
+    low: float
+    close: float
+
+
+class ExplainCandleRequest(BaseModel):
+    ohlc: OHLC
+    volume: str = Field(..., pattern="^(low|avg|high)$")
+    trend: str = Field("unknown", pattern="^(up|down|range|unknown)$")
+    near_level: str = Field("none", pattern="^(support|resistance|none)$")
+    level_price: Optional[float] = None
+    gap: str = Field("none", pattern="^(none|up|down)$")
+    news_flag: Optional[bool] = False
+    prev_high: Optional[float] = None
+    prev_low: Optional[float] = None
+
+
+class ExplainCandleResponse(BaseModel):
+    summary: str
+    context: List[str]
+    interpretation: str
+    what_to_watch: List[str]
+    confidence: str
+
+
 @router.post("/search", response_model=SearchResponse)
 async def search_stocks(request: SearchRequest):
     """
@@ -404,6 +441,37 @@ async def search_stocks(request: SearchRequest):
         cache_manager.set(cache_key, response_data, ttl_seconds=3600)
         
         return SearchResponse(**response_data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
+@router.post("/explain-candle", response_model=ExplainCandleResponse)
+async def explain_candle(request: ExplainCandleRequest):
+    """
+    Rule-based candle explanation for MVP (no external AI dependency)
+    """
+    try:
+        ctx = CandleContext(
+            open=request.ohlc.open,
+            high=request.ohlc.high,
+            low=request.ohlc.low,
+            close=request.ohlc.close,
+            volume_bucket=request.volume,
+            trend=request.trend,
+            near_level=request.near_level,
+            level_price=request.level_price,
+            gap=request.gap,
+            news_flag=bool(request.news_flag),
+            prev_high=request.prev_high,
+            prev_low=request.prev_low,
+        )
+        result = CandleExplainer.explain(ctx)
+        return ExplainCandleResponse(**result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
