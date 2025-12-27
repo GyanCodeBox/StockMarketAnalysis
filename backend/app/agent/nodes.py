@@ -5,8 +5,10 @@ from app.agent.state import AgentState
 from app.services.kite_service import KiteService
 from app.services.technical_tool import TechnicalTool
 from app.services.accumulation_zone_service import AccumulationZoneService
+from app.services.failed_breakout_service import FailedBreakoutService
 from app.tools.fundamental_tool import FundamentalTool
 from app.services.llm_service import LLMService
+from app.services.market_structure_service import MarketStructureService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,6 +17,8 @@ logger = logging.getLogger(__name__)
 kite_service = KiteService()
 technical_tool = TechnicalTool()
 accumulation_service = AccumulationZoneService()
+failed_breakout_service = FailedBreakoutService()
+market_structure_service = MarketStructureService()
 fundamental_tool = FundamentalTool()
 llm_service = LLMService()
 
@@ -125,6 +129,27 @@ async def calc_indicators_node(state: AgentState) -> AgentState:
         except Exception as zone_err:
             logger.warning(f"Accumulation zone detection failed: {zone_err}")
             state["accumulation_zones"] = []
+        try:
+            state["failed_breakouts"] = failed_breakout_service.detect_failed_breakouts(
+                ohlc_data,
+                indicators=indicators,
+            )
+        except Exception as fb_err:
+            logger.warning(f"Failed breakout detection failed: {fb_err}")
+            state["failed_breakouts"] = []
+            state["failed_breakouts"] = []
+
+        # Market Structure Decision Matrix (Arbitration)
+        try:
+            structure = market_structure_service.evaluate_structure(
+                ohlc_data,
+                indicators=indicators
+            )
+            state["market_structure"] = structure.to_dict()
+        except Exception as struct_err:
+            logger.warning(f"Market structure evaluation failed: {struct_err}")
+            state["market_structure"] = None
+
         state["status"] = "indicators_calculated"
         
     except Exception as e:

@@ -4,7 +4,7 @@ import ChartSettings, { TIMEFRAME_DEFAULTS } from './ChartSettings'
 import QuickMAToggles from './QuickMAToggles'
 import { Calendar, Clock, Loader2 } from 'lucide-react'
 
-function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh }) {
+function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], failedBreakouts = [], isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh }) {
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
@@ -25,16 +25,26 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
   const [zoneOverlays, setZoneOverlays] = useState([])
   const [hoverZone, setHoverZone] = useState(null)
   const [selectedZone, setSelectedZone] = useState(null)
+  const [showFailedBreakouts, setShowFailedBreakouts] = useState(true)
+  const [failedMarkers, setFailedMarkers] = useState([])
+  const [hoverFailure, setHoverFailure] = useState(null)
+  const [selectedFailure, setSelectedFailure] = useState(null)
 
   // Load initial MA config from local storage or use defaults
   useEffect(() => {
     const timeframe = ohlcData?.interval || 'day'
     const savedPrefs = localStorage.getItem(`chart_prefs_${symbol}_${timeframe}`)
     const savedZonePref = localStorage.getItem(`accum_zones_${symbol}_${timeframe}`)
+    const savedFailedPref = localStorage.getItem(`failed_breakouts_${symbol}_${timeframe}`)
     if (savedZonePref !== null) {
       setShowZones(savedZonePref === 'true')
     } else {
       setShowZones(true)
+    }
+    if (savedFailedPref !== null) {
+      setShowFailedBreakouts(savedFailedPref === 'true')
+    } else {
+      setShowFailedBreakouts(true)
     }
     if (savedPrefs) {
       try {
@@ -66,6 +76,18 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
       setSelectedZone(null)
     }
   }, [ohlcData?.interval, showZones, symbol])
+
+  const handleToggleFailedBreakouts = useCallback(() => {
+    const timeframe = ohlcData?.interval || 'day'
+    const next = !showFailedBreakouts
+    setShowFailedBreakouts(next)
+    localStorage.setItem(`failed_breakouts_${symbol}_${timeframe}`, String(next))
+    if (!next) {
+      setFailedMarkers([])
+      setSelectedFailure(null)
+      setHoverFailure(null)
+    }
+  }, [ohlcData?.interval, showFailedBreakouts, symbol])
 
   // Handle body scroll lock
   useEffect(() => {
@@ -276,7 +298,55 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
   useEffect(() => {
     setSelectedZone(null)
     setHoverZone(null)
+    setSelectedFailure(null)
+    setHoverFailure(null)
   }, [symbol, ohlcData?.interval])
+
+  const computeFailedMarkers = useCallback(() => {
+    if (!chartRef.current || !candlestickSeriesRef.current || !showFailedBreakouts || !failedBreakouts?.length) {
+      setFailedMarkers([])
+      return
+    }
+    const timeScale = chartRef.current.timeScale()
+    const priceToY = (price) => candlestickSeriesRef.current.priceToCoordinate(price)
+    const normalizeTime = (val) => {
+      const intraday = (ohlcData?.interval === 'hour' || ohlcData?.interval === '15minute' || ohlcData?.interval === '5minute')
+      if (!val) return null
+      if (intraday) {
+        const d = val instanceof Date ? val : new Date(val)
+        if (isNaN(d)) return null
+        return Math.floor(d.getTime() / 1000)
+      }
+      if (typeof val === 'string') {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val
+        const parsed = new Date(val)
+        if (!isNaN(parsed)) return parsed.toISOString().slice(0, 10)
+        if (val.includes('T')) return val.split('T')[0]
+        return null
+      }
+      if (val instanceof Date) return val.toISOString().slice(0, 10)
+      return null
+    }
+    const markers = []
+    failedBreakouts.forEach((fb, idx) => {
+      const t = normalizeTime(fb.failure_time || fb.breakout_time)
+      if (!t) return
+      const x = timeScale.timeToCoordinate(t)
+      const y = priceToY(fb.breakout_level)
+      if (x == null || y == null) return
+      markers.push({
+        id: `${idx}-${t}`,
+        x,
+        y,
+        event: fb,
+      })
+    })
+    setFailedMarkers(markers)
+  }, [failedBreakouts, showFailedBreakouts, ohlcData?.interval])
+
+  useEffect(() => {
+    computeFailedMarkers()
+  }, [computeFailedMarkers, failedBreakouts])
 
   // Update Data and Indicators
   useEffect(() => {
@@ -548,6 +618,16 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
           >
             Zones: {showZones ? 'On' : 'Off'}
           </button>
+          <button
+            onClick={handleToggleFailedBreakouts}
+            className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${showFailedBreakouts
+              ? 'bg-amber-900/40 border-amber-500/40 text-amber-200 hover:bg-amber-900/70'
+              : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+              }`}
+            title="Toggle failed breakout markers"
+          >
+            Failed BO: {showFailedBreakouts ? 'On' : 'Off'}
+          </button>
           <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
             <div className="pl-3 py-1.5 text-slate-500">
               {['day', 'week'].includes(ohlcData.interval) ? <Calendar className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
@@ -636,6 +716,41 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
         </div>
       </div>
 
+      {showFailedBreakouts && selectedFailure && (
+        <div className="mb-6 bg-slate-950 border border-amber-500/40 rounded-xl p-5 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-amber-100 flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+              Failed Breakout Detail
+            </div>
+            <div className="text-xs flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded border border-amber-500/60 text-amber-200">
+                {selectedFailure.confidence} confidence
+              </span>
+              <button
+                onClick={() => setSelectedFailure(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="text-slate-200 mt-2 font-semibold">{selectedFailure.summary}</div>
+          <div className="mt-3 text-sm text-slate-200">
+            <div className="text-xs uppercase text-slate-400 mb-1">Context</div>
+            <ul className="list-disc list-inside space-y-1">
+              {selectedFailure.context?.map((c, idx) => <li key={idx}>{c}</li>)}
+            </ul>
+          </div>
+          <div className="mt-3 text-sm text-slate-200">
+            <div className="text-xs uppercase text-slate-400 mb-1">What to watch</div>
+            <ul className="list-disc list-inside space-y-1">
+              {selectedFailure.what_to_watch?.map((c, idx) => <li key={idx}>{c}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Candlestick Chart with Legend */}
       <div
         className={`relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950 transition-all duration-300 ${isMaximized ? 'flex-1' : 'mb-8 h-[450px]'}`}
@@ -648,6 +763,48 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
         >
           {/* Content will be injected here */}
         </div>
+
+        {/* Failed breakout markers */}
+        {showFailedBreakouts && failedMarkers.length > 0 && (
+          <div className="absolute inset-0 z-[18] pointer-events-none">
+            {failedMarkers.map((m) => (
+              <div
+                key={m.id}
+                className="absolute flex items-center justify-center"
+                style={{
+                  left: m.x - 6,
+                  top: m.y - 6,
+                  width: 12,
+                  height: 12,
+                  pointerEvents: 'auto',
+                }}
+                onMouseEnter={() => setHoverFailure(m.event)}
+                onMouseLeave={() => setHoverFailure(null)}
+                onClick={() => setSelectedFailure(m.event)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setSelectedFailure(m.event)
+                }}
+              >
+                <div className="w-3 h-3 rounded-full border border-amber-400 bg-amber-500/20 flex items-center justify-center text-[9px] text-amber-300">
+                  !
+                </div>
+              </div>
+            ))}
+            {hoverFailure && (
+              <div
+                className="absolute bg-slate-900/95 border border-amber-500/50 text-xs text-slate-100 px-3 py-2 rounded shadow-xl"
+                style={{ right: '12px', top: '12px' }}
+              >
+                <div className="font-semibold flex items-center gap-2 text-amber-200">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                  Failed breakout ({hoverFailure.confidence})
+                </div>
+                <div className="text-slate-200 mt-1">{hoverFailure.summary}</div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Accumulation Zones overlay */}
         {showZones && zoneOverlays.length > 0 && (

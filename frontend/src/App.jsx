@@ -8,6 +8,7 @@ import LoadingAnimation from './components/LoadingAnimation'
 import TechnicalScoreCard from './components/TechnicalScoreCard'
 import LazyAccordionSection from './components/LazyAccordionSection'
 import ScrollNavigation from './components/ScrollNavigation'
+import MarketStructureBanner from './components/MarketStructureBanner'
 import { TIMEFRAME_DEFAULTS } from './components/ChartSettings'
 import './index.css'
 
@@ -172,6 +173,11 @@ function App() {
             {/* Content Views */}
             {activeTab === 'technical' ? (
               <div id="technical-section" className={`space - y - 6 ${isChartMaximized ? "" : "animate-fade-in"} `}>
+                {/* Market Structure Banner (Source of Truth) */}
+                {techData.market_structure && (
+                  <MarketStructureBanner structure={techData.market_structure} />
+                )}
+
                 {/* Technical Score Card */}
                 {techData.indicators?.technical_score && (
                   <TechnicalScoreCard scoreData={techData.indicators.technical_score} />
@@ -185,6 +191,7 @@ function App() {
                     ohlcData={techData.ohlc_data}
                     indicators={techData.indicators}
                     accumulationZones={techData.accumulation_zones}
+                    failedBreakouts={techData.failed_breakouts}
                     isMaximized={isChartMaximized}
                     onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
                     onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}

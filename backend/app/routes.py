@@ -30,6 +30,8 @@ class AnalyzeResponse(BaseModel):
     ohlc_data: Optional[dict] = None  # Historical OHLC data for charting
     indicators: dict
     accumulation_zones: Optional[list] = None
+    failed_breakouts: Optional[list] = None
+    market_structure: Optional[dict] = None # New field
     fundamental_data: Optional[dict] = None # Fundamental analysis data
     analysis: str
     status: str
@@ -84,6 +86,8 @@ async def analyze_stock(request: AnalyzeRequest):
             "ohlc_data": result.get("ohlc_data", {}),
             "indicators": result.get("indicators", {}),
             "accumulation_zones": result.get("accumulation_zones", []),
+            "failed_breakouts": result.get("failed_breakouts", []),
+            "market_structure": result.get("market_structure"),
             "fundamental_data": result.get("fundamental_data"),
             "analysis": result.get("analysis", ""),
             "status": result.get("status", "completed")
@@ -257,11 +261,21 @@ async def analyze_technical(request: AnalyzeRequest):
         # 2. Calc indicators
         indicators = tech.calculate_indicators(ohlc, quote.get("last_price", 0), ma_configs=ma_configs)
         from app.services.accumulation_zone_service import AccumulationZoneService
+        from app.services.failed_breakout_service import FailedBreakoutService
         zones = AccumulationZoneService().detect_zones(
             ohlc,
             lookback=60,
             trend_context="downtrend" if indicators.get("price_trend") == "bearish" else "unknown",
         )
+        failed_breakouts = FailedBreakoutService().detect_failed_breakouts(
+            ohlc,
+            indicators=indicators,
+        )
+        
+        # 3. Market Structure Arbitration
+        from app.services.market_structure_service import MarketStructureService
+        structure = MarketStructureService().evaluate_structure(ohlc, indicators=indicators)
+        market_structure = structure.to_dict()
         
         data = {
             "symbol": symbol,
@@ -269,6 +283,8 @@ async def analyze_technical(request: AnalyzeRequest):
             "ohlc_data": ohlc,
             "indicators": indicators,
             "accumulation_zones": zones,
+            "failed_breakouts": failed_breakouts,
+            "market_structure": market_structure,
         }
         
         cache_manager.set(cache_key, data, ttl_seconds=300) # 5 min for tech
