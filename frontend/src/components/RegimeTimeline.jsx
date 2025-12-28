@@ -50,15 +50,22 @@ const RegimeTimeline = ({ regimeHistory = [], timeframe = 'day', onSegmentClick 
     // 2. Relative Scaling Logic
     const processedSegments = useMemo(() => {
         const totalDuration = regimeHistory.reduce((sum, item) => sum + item.duration, 0);
+        let currentOffset = 0;
 
-        return regimeHistory.map((item, idx) => ({
-            ...item,
-            widthPct: (item.duration / totalDuration) * 100,
-            color: getRegimeColor(item.bias),
-            label: getRegimeLabel(item.bias),
-            isLatest: idx === regimeHistory.length - 1,
-            timeLabel: formatTimeDuration(item.duration, timeframe)
-        }));
+        return regimeHistory.map((item, idx) => {
+            const widthPct = (item.duration / totalDuration) * 100;
+            const segment = {
+                ...item,
+                widthPct,
+                offsetLeftPct: currentOffset,
+                color: getRegimeColor(item.bias),
+                label: getRegimeLabel(item.bias),
+                isLatest: idx === regimeHistory.length - 1,
+                timeLabel: formatTimeDuration(item.duration, timeframe)
+            };
+            currentOffset += widthPct;
+            return segment;
+        });
     }, [regimeHistory, timeframe]);
 
     // Calculate legend counts
@@ -159,7 +166,7 @@ const RegimeTimeline = ({ regimeHistory = [], timeframe = 'day', onSegmentClick 
 
                                 {/* ENHANCED TOOLTIP */}
                                 <div className={`opacity-0 group-hover:opacity-100 transition-all duration-200 absolute bottom-full mb-3 z-[100] pointer-events-none transform translate-y-2 group-hover:translate-y-0 text-white
-                                    ${isFirst ? 'left-0' : isLast ? 'right-0' : 'left-1/2 -translate-x-1/2'}
+                                    ${(segment.offsetLeftPct < 20) ? 'left-0' : (segment.offsetLeftPct + segment.widthPct > 80) ? 'right-0' : 'left-1/2 -translate-x-1/2'}
                                 `}>
                                     <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-4 text-xs w-64 text-left backdrop-blur-md bg-opacity-95 ring-1 ring-white/10 relative">
                                         <div className="flex justify-between items-center mb-2 border-b border-gray-800 pb-2">
@@ -194,7 +201,7 @@ const RegimeTimeline = ({ regimeHistory = [], timeframe = 'day', onSegmentClick 
                                             </div>
                                         </div>
                                         <div className={`absolute top-full border-8 border-transparent border-t-gray-900 
-                                            ${isFirst ? 'left-4' : isLast ? 'right-4' : 'left-1/2 -translate-x-1/2'}
+                                            ${(segment.offsetLeftPct < 20) ? 'left-4' : (segment.offsetLeftPct + segment.widthPct > 80) ? 'right-4' : 'left-1/2 -translate-x-1/2'}
                                         `} />
                                     </div>
                                 </div>

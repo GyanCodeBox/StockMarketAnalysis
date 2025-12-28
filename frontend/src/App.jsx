@@ -190,7 +190,7 @@ function App() {
                 )}
 
                 {/* Chart Section */}
-                <div className={isChartMaximized ? "" : "bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-2xl overflow-hidden"}>
+                <div className={isChartMaximized ? "" : "bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-2xl"}>
                   <StockChart
                     symbol={techData.symbol}
                     quote={techData.quote}
