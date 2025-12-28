@@ -22,6 +22,7 @@ class AnalyzeRequest(BaseModel):
     exchange: Optional[str] = Field(default="NSE", description="Exchange code (NSE, BSE)")
     timeframe: Optional[str] = Field(default="day", description="Timeframe: 'day', 'week', 'hour', '15minute', '5minute'")
     moving_averages: Optional[List[MovingAverageConfig]] = Field(default=None, description="Custom MA configurations")
+    previous_bias: Optional[str] = Field(default=None, description="Previous market structure bias for transition narration")
 
 class AnalyzeResponse(BaseModel):
     symbol: str
@@ -30,6 +31,7 @@ class AnalyzeResponse(BaseModel):
     ohlc_data: Optional[dict] = None  # Historical OHLC data for charting
     indicators: dict
     accumulation_zones: Optional[list] = None
+    distribution_zones: Optional[list] = None
     failed_breakouts: Optional[list] = None
     market_structure: Optional[dict] = None # New field
     fundamental_data: Optional[dict] = None # Fundamental analysis data
@@ -260,21 +262,28 @@ async def analyze_technical(request: AnalyzeRequest):
         
         # 2. Calc indicators
         indicators = tech.calculate_indicators(ohlc, quote.get("last_price", 0), ma_configs=ma_configs)
+        
         from app.services.accumulation_zone_service import AccumulationZoneService
+        from app.services.distribution_zone_service import DistributionZoneService
+        from app.services.market_structure_service import MarketStructureService
         from app.services.failed_breakout_service import FailedBreakoutService
-        zones = AccumulationZoneService().detect_zones(
-            ohlc,
-            lookback=60,
-            trend_context="downtrend" if indicators.get("price_trend") == "bearish" else "unknown",
-        )
+
+        acc_zones = AccumulationZoneService(use_formalized_logic=True).detect_zones(ohlc, lookback=60, timeframe=timeframe)
+        dist_zones = DistributionZoneService().detect_zones(ohlc, indicators=indicators, timeframe=timeframe)
+        
         failed_breakouts = FailedBreakoutService().detect_failed_breakouts(
             ohlc,
             indicators=indicators,
         )
         
         # 3. Market Structure Arbitration
-        from app.services.market_structure_service import MarketStructureService
-        structure = MarketStructureService().evaluate_structure(ohlc, indicators=indicators)
+        structure = MarketStructureService().evaluate_structure(
+            ohlc, 
+            indicators=indicators,
+            acc_zones=acc_zones,
+            dist_zones=dist_zones,
+            previous_bias=request.previous_bias
+        )
         market_structure = structure.to_dict()
         
         data = {
@@ -282,7 +291,8 @@ async def analyze_technical(request: AnalyzeRequest):
             "quote": quote,
             "ohlc_data": ohlc,
             "indicators": indicators,
-            "accumulation_zones": zones,
+            "accumulation_zones": acc_zones,
+            "distribution_zones": dist_zones,
             "failed_breakouts": failed_breakouts,
             "market_structure": market_structure,
         }

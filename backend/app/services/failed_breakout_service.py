@@ -1,7 +1,7 @@
 """
 Rule-based failed breakout detection for MVP.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 import math
 import statistics
@@ -21,6 +21,7 @@ class FailedBreakoutEvent:
     context: List[str]
     what_to_watch: List[str]
     confidence: str
+    metrics: Dict[str, Any] = field(default_factory=dict)
 
 
 class FailedBreakoutService:
@@ -40,6 +41,7 @@ class FailedBreakoutService:
         self.base_window = base_window
         self.min_breakout_range_pct = min_breakout_range_pct
         self.reentry_window = reentry_window
+        self.lookback_window = 40 # Standardized lookback for volume context
 
     def detect_failed_breakouts(
         self,
@@ -116,7 +118,8 @@ class FailedBreakoutService:
         if n < 5 or avg_range <= 0:
             return None
 
-        breakout_idx = None
+        break_idx = None
+        fail_idx = None
         level = resistance if direction == "up" else support
 
         # Find latest breakout candidate
@@ -124,15 +127,15 @@ class FailedBreakoutService:
             c = recent[i]
             if direction == "up":
                 if c["close"] > level and (c["close"] - level) >= avg_range * self.min_breakout_range_pct:
-                    breakout_idx = i
+                    break_idx = i
             else:
                 if c["close"] < level and (level - c["close"]) >= avg_range * self.min_breakout_range_pct:
-                    breakout_idx = i
+                    break_idx = i
 
-        if breakout_idx is None:
+        if break_idx is None:
             return None
 
-        breakout_candle = recent[breakout_idx]
+        breakout_candle = recent[break_idx]
 
         # Evaluate failure over next N candles
         reentry = False
@@ -141,17 +144,26 @@ class FailedBreakoutService:
         no_follow_through = False
         counter_candle = False
 
-        window_end = min(n, breakout_idx + 1 + self.reentry_window)
-        after = recent[breakout_idx:window_end]
+        window_end = min(n, break_idx + 1 + self.reentry_window)
+        after = recent[break_idx:window_end]
 
         # Re-entry into prior range
-        for c in after:
+        for idx, c in enumerate(after):
             if direction == "up" and c["close"] < level:
                 reentry = True
+                fail_idx = break_idx + idx
+                break
             if direction == "down" and c["close"] > level:
                 reentry = True
+                fail_idx = break_idx + idx
+                break
 
-        # Volume failure: breakout vol <= average
+        # If no re-entry found yet, use latest candle as potential failure index placeholder
+        if fail_idx is None:
+            fail_idx = n - 1
+
+        # Volume ratio: breakout vol / average
+        vol_ratio = breakout_candle["volume"] / avg_vol if avg_vol > 0 else 1.0
         if breakout_candle["volume"] <= avg_vol:
             vol_fail = True
 
@@ -171,16 +183,13 @@ class FailedBreakoutService:
         else:
             wick_reject = lower / (body + 1e-6) > 1.2 and lower / rng > 0.35
 
-        # Lack of follow-through: Only valid if there ARE later candles
-        later = recent[breakout_idx + 1 : window_end]
+        # Lack of follow-through
+        later = recent[break_idx + 1 : window_end]
         if later:
             if direction == "up":
                 no_follow_through = not any(c2["close"] > breakout_candle["close"] for c2 in later)
             else:
                 no_follow_through = not any(c2["close"] < breakout_candle["close"] for c2 in later)
-        else:
-            # Fresh breakout (latest candle) cannot have "failed follow through" yet
-            no_follow_through = False
 
         # Opposite pressure candle soon after
         for c2 in later:
@@ -203,47 +212,41 @@ class FailedBreakoutService:
             else "Downside breakout attempt failed with rejection."
         )
 
-        context: List[str] = []
-        context.append(f"Breakout {'above' if direction == 'up' else 'below'} level ₹{round(level, 2)}")
-        if vol_fail:
-            context.append("Breakout volume did not expand vs recent average")
-        if reentry:
-            context.append("Price quickly closed back inside prior range")
-        if wick_reject:
-            context.append("Long wick against breakout direction, showing rejection")
-        if no_follow_through:
-            context.append("No follow-through closes beyond breakout candle")
-        if counter_candle:
-            context.append("Strong opposite-direction candle appeared soon after")
+        context: List[str] = [f"Breakout {'above' if direction == 'up' else 'below'} level ₹{round(level, 2)}"]
+        if vol_fail: context.append("Breakout volume did not expand vs recent average")
+        if reentry: context.append("Price quickly closed back inside prior range")
+        if wick_reject: context.append("Long wick against breakout direction, showing rejection")
+        if no_follow_through: context.append("No follow-through closes beyond breakout candle")
+        if counter_candle: context.append("Strong opposite-direction candle appeared soon after")
 
         what_to_watch = [
             f"Acceptance {'below' if direction == 'up' else 'above'} ₹{round(level, 2)}",
             "Behavior around prior range midpoint",
         ]
-        if direction == "up":
-            what_to_watch.append("Watch for downside volume pickup confirming trap")
-        else:
-            what_to_watch.append("Watch for upside volume pickup confirming short trap")
 
-        if score >= 4:
-            confidence = "High"
-        elif score == 3:
-            confidence = "Medium"
-        else:
-            confidence = "Low"
+        if score >= 4: confidence = "High"
+        elif score == 3: confidence = "Medium"
+        else: confidence = "Low"
 
-        failure_candle = after[-1]
+        # Failure Window
+        failure_window = fail_idx - break_idx
 
         return FailedBreakoutEvent(
             direction=direction,
             breakout_level=round(level, 2),
             breakout_time=breakout_candle["time"],
-            failure_time=failure_candle["time"],
-            failure_type=failure_type,
+            failure_time=recent[fail_idx]["time"],
+            failure_type=failure_type.replace('_', ' ').capitalize(),
             summary=summary,
             context=context,
             what_to_watch=what_to_watch,
             confidence=confidence,
+            metrics={
+                "breakout_level": round(level, 2),
+                "volume_ratio": round(vol_ratio, 2),
+                "failure_window": failure_window,
+                "score": score
+            }
         )
 
     def _classify_failure(

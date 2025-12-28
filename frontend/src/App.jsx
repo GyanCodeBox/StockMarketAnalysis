@@ -20,6 +20,7 @@ function App() {
   const [exchange, setExchange] = useState('NSE')
   const [activeTab, setActiveTab] = useState('technical')
   const [isChartMaximized, setIsChartMaximized] = useState(false)
+  const [selectedStructure, setSelectedStructure] = useState(null)
 
   // Handle Escape key to exit fullscreen
   useEffect(() => {
@@ -44,6 +45,7 @@ function App() {
       setSymbol(symbolValue)
       setExchange(exchangeValue)
       setIsChartMaximized(false)
+      setSelectedStructure(null)
     }
 
     // Load saved MA config for this symbol/timeframe if it exists
@@ -67,7 +69,8 @@ function App() {
       symbol: symbolValue,
       exchange: exchangeValue,
       timeframe,
-      moving_averages
+      moving_averages,
+      previous_bias: techData?.market_structure?.bias
     };
 
     // Progressive requests
@@ -175,7 +178,10 @@ function App() {
               <div id="technical-section" className={`space - y - 6 ${isChartMaximized ? "" : "animate-fade-in"} `}>
                 {/* Market Structure Banner (Source of Truth) */}
                 {techData.market_structure && (
-                  <MarketStructureBanner structure={techData.market_structure} />
+                  <MarketStructureBanner
+                    structure={techData.market_structure}
+                    onSelectStructure={(data) => setSelectedStructure({ type: techData.market_structure.bias, data })}
+                  />
                 )}
 
                 {/* Technical Score Card */}
@@ -191,12 +197,15 @@ function App() {
                     ohlcData={techData.ohlc_data}
                     indicators={techData.indicators}
                     accumulationZones={techData.accumulation_zones}
+                    distributionZones={techData.distribution_zones}
                     failedBreakouts={techData.failed_breakouts}
                     isMaximized={isChartMaximized}
                     onToggleMaximize={() => setIsChartMaximized(!isChartMaximized)}
                     onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
                     loading={loading}
                     onRefresh={() => handleAnalyze(symbol, exchange, techData.ohlc_data.interval)}
+                    selectedStructure={selectedStructure}
+                    onSelectStructure={setSelectedStructure}
                   />
                 </div>
 

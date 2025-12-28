@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, ColorType } from 'lightweight-charts'
 import ChartSettings, { TIMEFRAME_DEFAULTS } from './ChartSettings'
 import QuickMAToggles from './QuickMAToggles'
+import StructureDetailPanel from './StructureDetailPanel'
 import { Calendar, Clock, Loader2 } from 'lucide-react'
 
-function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], failedBreakouts = [], isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh }) {
+function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], distributionZones = [], failedBreakouts = [], isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh, selectedStructure, onSelectStructure }) {
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
@@ -23,8 +24,7 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
   const [showExplain, setShowExplain] = useState(false)
   const [showZones, setShowZones] = useState(true)
   const [zoneOverlays, setZoneOverlays] = useState([])
-  const [hoverZone, setHoverZone] = useState(null)
-  const [selectedZone, setSelectedZone] = useState(null)
+  const [hoverStructure, setHoverStructure] = useState(null)
   const [showFailedBreakouts, setShowFailedBreakouts] = useState(true)
   const [failedMarkers, setFailedMarkers] = useState([])
   const [hoverFailure, setHoverFailure] = useState(null)
@@ -73,7 +73,7 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
     localStorage.setItem(`accum_zones_${symbol}_${timeframe}`, String(next))
     if (!next) {
       setZoneOverlays([])
-      setSelectedZone(null)
+      onSelectStructure(null)
     }
   }, [ohlcData?.interval, showZones, symbol])
 
@@ -226,7 +226,7 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
   }, []) // Only create once
 
   const computeZoneOverlays = useCallback(() => {
-    if (!chartRef.current || !candlestickSeriesRef.current || !showZones || !accumulationZones?.length) {
+    if (!chartRef.current || !candlestickSeriesRef.current || !showZones) {
       setZoneOverlays([])
       return
     }
@@ -254,35 +254,69 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
       if (val instanceof Date) return val.toISOString().slice(0, 10)
       return null
     }
-    const overlays = []
-    accumulationZones.forEach((zone) => {
+
+    const overlays = [];
+
+    // 1. Process Accumulation Zones
+    (accumulationZones || []).forEach((zone) => {
       const start = normalizeZoneTime(zone.start_time)
       const end = normalizeZoneTime(zone.end_time)
       if (!start || !end) return
       const x1 = timeScale.timeToCoordinate(start)
       const x2 = timeScale.timeToCoordinate(end)
-      const yHigh = candlestickSeriesRef.current.priceToCoordinate(zone.zone_high)
-      const yLow = candlestickSeriesRef.current.priceToCoordinate(zone.zone_low)
+      const yHigh = candlestickSeriesRef.current.priceToCoordinate(zone.zone_high || zone.metrics?.high)
+      const yLow = candlestickSeriesRef.current.priceToCoordinate(zone.zone_low || zone.metrics?.low)
       if (x1 == null || x2 == null || yHigh == null || yLow == null) return
       const left = Math.min(x1, x2)
       const width = Math.abs(x2 - x1)
       const top = Math.min(yHigh, yLow)
       const height = Math.abs(yLow - yHigh)
       overlays.push({
-        id: `${zone.start_time}-${zone.end_time}`,
-        left,
-        width,
-        top,
-        height,
-        zone
+        id: `accum-${zone.start_time}-${zone.end_time}`,
+        left, width, top, height,
+        zone,
+        type: 'ACCUMULATION'
       })
-    })
+    });
+
+    // 2. Process Distribution Zones
+    (distributionZones || []).forEach((zone) => {
+      const start = normalizeZoneTime(zone.start_time)
+      const end = normalizeZoneTime(zone.end_time)
+      if (!start || !end) return
+      const x1 = timeScale.timeToCoordinate(start)
+      const x2 = timeScale.timeToCoordinate(end)
+      const yHigh = candlestickSeriesRef.current.priceToCoordinate(zone.zone_high || zone.metrics?.high || (zone.metrics?.zone_high)) // Fallback to metrics if available
+      const yLow = candlestickSeriesRef.current.priceToCoordinate(zone.zone_low || zone.metrics?.low || (zone.metrics?.zone_low))
+
+      // If zone properties aren't directly available, use metrics
+      const hi = zone.zone_high || (zone.metrics && (zone.metrics.high || zone.metrics.zone_high))
+      const lo = zone.zone_low || (zone.metrics && (zone.metrics.low || zone.metrics.zone_low))
+
+      const yCoordHigh = candlestickSeriesRef.current.priceToCoordinate(hi)
+      const yCoordLow = candlestickSeriesRef.current.priceToCoordinate(lo)
+
+      if (x1 == null || x2 == null || yCoordHigh == null || yCoordLow == null) return
+
+      const left = Math.min(x1, x2)
+      const width = Math.abs(x2 - x1)
+      const top = Math.min(yCoordHigh, yCoordLow)
+      const height = Math.abs(yCoordLow - yCoordHigh)
+
+      overlays.push({
+        id: `dist-${zone.start_time}-${zone.end_time}`,
+        left, width, top, height,
+        zone,
+        type: 'DISTRIBUTION'
+      })
+    });
+
     setZoneOverlays(overlays)
-  }, [accumulationZones, showZones])
+  }, [accumulationZones, distributionZones, showZones])
 
   useEffect(() => {
     computeZoneOverlays()
-  }, [computeZoneOverlays, accumulationZones])
+  }, [computeZoneOverlays, accumulationZones, distributionZones])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -294,13 +328,6 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
       timeScale.unsubscribeVisibleTimeRangeChange(handler)
     }
   }, [computeZoneOverlays])
-
-  useEffect(() => {
-    setSelectedZone(null)
-    setHoverZone(null)
-    setSelectedFailure(null)
-    setHoverFailure(null)
-  }, [symbol, ohlcData?.interval])
 
   const computeFailedMarkers = useCallback(() => {
     if (!chartRef.current || !candlestickSeriesRef.current || !showFailedBreakouts || !failedBreakouts?.length) {
@@ -410,14 +437,20 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
 
     const sortData = (a, b) => (typeof a.time === 'string' ? a.time.localeCompare(b.time) : a.time - b.time)
 
-    // Deduplicate
+    // Deduplicate and filter out any items with NaN or invalid values
     const uniqueChartData = Array.from(
       chartData.reduce((map, item) => map.set(item.time, item), new Map()).values()
+    ).filter(d =>
+      d.time &&
+      Number.isFinite(d.open) &&
+      Number.isFinite(d.high) &&
+      Number.isFinite(d.low) &&
+      Number.isFinite(d.close)
     ).sort(sortData);
 
     const uniqueVolumeData = Array.from(
       volumeData.reduce((map, item) => map.set(item.time, item), new Map()).values()
-    ).sort(sortData);
+    ).filter(d => d.time && Number.isFinite(d.value)).sort(sortData);
 
     if (uniqueChartData.length > 0) candlestickSeries.setData(uniqueChartData)
     if (uniqueVolumeData.length > 0) volumeSeries.setData(uniqueVolumeData)
@@ -580,6 +613,11 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
     node.addEventListener('contextmenu', handler)
     return () => node.removeEventListener('contextmenu', handler)
   }, [explainCandle])
+
+  const priceToY = (price) => {
+    if (!candlestickSeriesRef.current) return 0
+    return candlestickSeriesRef.current.priceToCoordinate(price)
+  }
 
   if (!indicators || !quote) return null
 
@@ -806,7 +844,7 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
           </div>
         )}
 
-        {/* Accumulation Zones overlay */}
+        {/* Market Structure Zones overlay */}
         {showZones && zoneOverlays.length > 0 && (
           <div className="absolute inset-0 z-[15] pointer-events-none">
             {zoneOverlays.map((rect) => (
@@ -818,20 +856,24 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
                   width: rect.width,
                   top: rect.top,
                   height: rect.height || 1,
-                  background: 'linear-gradient(180deg, rgba(59,130,246,0.08), rgba(16,185,129,0.12))',
-                  border: '1px solid rgba(14,165,233,0.35)',
+                  background: rect.type === 'DISTRIBUTION'
+                    ? 'linear-gradient(180deg, rgba(244,63,94,0.08), rgba(190,18,60,0.12))'
+                    : 'linear-gradient(180deg, rgba(59,130,246,0.08), rgba(16,185,129,0.12))',
+                  border: rect.type === 'DISTRIBUTION'
+                    ? '1px solid rgba(244,63,94,0.35)'
+                    : '1px solid rgba(14,165,233,0.35)',
                   pointerEvents: 'auto',
                 }}
-                onMouseEnter={() => setHoverZone(rect.zone)}
-                onMouseLeave={() => setHoverZone(null)}
-                onClick={() => setSelectedZone(rect.zone)}
+                onMouseEnter={() => setHoverStructure({ type: rect.type, data: rect.zone })}
+                onMouseLeave={() => setHoverStructure(null)}
+                onClick={() => onSelectStructure({ type: rect.type, data: rect.zone })}
                 onContextMenu={(e) => {
                   e.preventDefault()
-                  setSelectedZone(rect.zone)
+                  onSelectStructure({ type: rect.type, data: rect.zone })
                 }}
               />
             ))}
-            {hoverZone && (
+            {hoverStructure && (
               <div
                 className="absolute bg-slate-900/95 border border-slate-700 text-xs text-slate-200 px-3 py-2 rounded shadow-xl"
                 style={{
@@ -839,11 +881,11 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
                   top: '12px',
                 }}
               >
-                <div className="font-semibold text-slate-100 flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
-                  Accumulation zone ({hoverZone.confidence})
+                <div className={`font-semibold flex items-center gap-2 ${hoverStructure.type === 'DISTRIBUTION' ? 'text-rose-300' : 'text-emerald-300'}`}>
+                  <span className={`inline-block w-2 h-2 rounded-full ${hoverStructure.type === 'DISTRIBUTION' ? 'bg-rose-400' : 'bg-emerald-400'}`} />
+                  {hoverStructure.type === 'DISTRIBUTION' ? 'Distribution' : 'Accumulation'} zone ({hoverStructure.data.confidence})
                 </div>
-                <div className="text-slate-300 mt-1">{hoverZone.summary}</div>
+                <div className="text-slate-300 mt-1">{hoverStructure.data.summary}</div>
               </div>
             )}
           </div>
@@ -898,8 +940,8 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
                     <div className="text-xs text-slate-400 uppercase tracking-wide">Interpretation</div>
                     <div className="text-slate-200">{explainState.data.interpretation}</div>
                   </div>
-                <div className="h-px bg-slate-800" />
-                <div className="text-[11px] text-slate-400 uppercase tracking-wide">Decision Impact</div>
+                  <div className="h-px bg-slate-800" />
+                  <div className="text-[11px] text-slate-400 uppercase tracking-wide">Decision Impact</div>
                   <div>
                     <div className="text-xs text-slate-400 uppercase tracking-wide">What to watch</div>
                     <ul className="list-disc list-inside text-slate-200 text-sm space-y-0.5">
@@ -910,20 +952,20 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <span className="text-slate-400 uppercase tracking-wide">Confidence</span>
-                  {(() => {
-                    const level = (explainState.data.confidence || '').toLowerCase()
-                    const colorMap = {
-                      low: 'bg-slate-800 text-slate-300 border-slate-700',
-                      medium: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
-                      high: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
-                    }
-                    const cls = colorMap[level] || 'bg-slate-800 text-slate-300 border-slate-700'
-                    return (
-                      <span className={`px-2 py-0.5 rounded border ${cls}`}>
-                        {explainState.data.confidence}
-                      </span>
-                    )
-                  })()}
+                    {(() => {
+                      const level = (explainState.data.confidence || '').toLowerCase()
+                      const colorMap = {
+                        low: 'bg-slate-800 text-slate-300 border-slate-700',
+                        medium: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+                        high: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+                      }
+                      const cls = colorMap[level] || 'bg-slate-800 text-slate-300 border-slate-700'
+                      return (
+                        <span className={`px-2 py-0.5 rounded border ${cls}`}>
+                          {explainState.data.confidence}
+                        </span>
+                      )
+                    })()}
                   </div>
                 </div>
               )}
@@ -938,51 +980,12 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
         )}
       </div>
 
-      {showZones && selectedZone && (
-        <div className="mb-6 bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-slate-100 flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
-              Accumulation Zone Detail
-            </div>
-            <div className="text-xs flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded border border-slate-700 text-slate-300">
-                {selectedZone.confidence} confidence
-              </span>
-              <button
-                onClick={() => setSelectedZone(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-          <div className="text-slate-200 mt-2 font-semibold">{selectedZone.summary}</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 text-sm text-slate-200">
-            <div>
-              <div className="text-xs uppercase text-slate-400 mb-1">Characteristics</div>
-              <ul className="list-disc list-inside space-y-1">
-                {selectedZone.characteristics?.map((c, idx) => <li key={idx}>{c}</li>)}
-              </ul>
-            </div>
-            <div>
-              <div className="text-xs uppercase text-slate-400 mb-1">What to watch</div>
-              <ul className="list-disc list-inside space-y-1">
-                {selectedZone.what_to_watch?.map((c, idx) => <li key={idx}>{c}</li>)}
-              </ul>
-            </div>
-          </div>
-          <div className="mt-3 text-sm text-slate-200">
-            <div className="text-xs uppercase text-slate-400 mb-1">Interpretation</div>
-            <div>{selectedZone.interpretation}</div>
-          </div>
-          <div className="mt-3 text-sm text-slate-200">
-            <div className="text-xs uppercase text-slate-400 mb-1">Failure signals</div>
-            <ul className="list-disc list-inside space-y-1">
-              {selectedZone.failure_signals?.map((c, idx) => <li key={idx}>{c}</li>)}
-            </ul>
-          </div>
-        </div>
+      {showZones && selectedStructure && (
+        <StructureDetailPanel
+          type={selectedStructure.type}
+          data={selectedStructure.data}
+          onClose={() => onSelectStructure(null)}
+        />
       )}
 
       {/* Indicators Summary - Hidden in Maximized mode for a cleaner view */}
