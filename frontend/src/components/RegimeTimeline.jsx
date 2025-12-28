@@ -251,7 +251,7 @@ const RegimeTimeline = ({ regimeHistory = [], timeframe = 'day', onSegmentClick 
                 })}
             </div>
 
-            <style jsx>{`
+            <style>{`
                 .stripe-small {
                     background-image: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px);
                 }

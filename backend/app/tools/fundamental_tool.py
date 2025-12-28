@@ -70,105 +70,239 @@ class FundamentalTool:
 
     def _calculate_metrics(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
-        Calculate Step-by-Step Growth and Averages
+        Calculate metrics and implement the 3-layer API contract: raw, derived, score
         """
-        # Ensure numeric columns
+        import numpy as np
+
+        # 1. CLEAN & PREPARE RAW DATA
         cols = ['eps', 'revenue', 'otherIncome', 'netIncome', 'operatingIncome', 'totalAssets', 'totalCurrentLiabilities']
         for col in cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # Net Profit Margin %
-        df['net_margin'] = (df['netIncome'] / df['revenue']) * 100
+        # Ensure we have essential data for calculations
+        df['year'] = df['date'].dt.year
+        df = df.sort_values('date', ascending=True).reset_index(drop=True)
 
-        # Other Income as % of Net Income
-        df['other_income_pct'] = (df['otherIncome'] / df['netIncome']) * 100
+        # 2. DERIVED METRICS LAYER
+        # YoY Calculations (4 periods back)
+        df['sales_yoy_pct'] = df['revenue'].pct_change(periods=4) * 100
+        df['eps_yoy_pct'] = df['eps'].pct_change(periods=4) * 100
+        df['net_income_yoy_pct'] = df['netIncome'].pct_change(periods=4) * 100
         
-        # 2-Quarter Rolling Averages (for absolute values)
-        df['eps_rolling_2q'] = df['eps'].rolling(window=2).mean()
+        # Margins and Other Income
+        df['net_margin_pct'] = (df['netIncome'] / df['revenue']) * 100
+        df['net_margin_yoy_delta'] = df['net_margin_pct'].diff(periods=4)
+        df['other_income_ratio'] = (df['otherIncome'] / df['netIncome']).replace([np.inf, -np.inf], 0).fillna(0)
+        df['other_income_3y_avg'] = df['other_income_ratio'].rolling(window=12).mean() # 12 quarters = 3 years
+
+        # 2-Quarter Rolling Averages (Momentum)
         df['sales_rolling_2q'] = df['revenue'].rolling(window=2).mean()
-
-        # 2-Quarter Rolling Growth % (for Chart 4)
-        # Rolling 2Q EPS Growth % = pct_change of rolling 2Q EPS
-        df['eps_rolling_2q_growth'] = df['eps_rolling_2q'].pct_change() * 100
+        df['eps_rolling_2q'] = df['eps'].rolling(window=2).mean()
         df['sales_rolling_2q_growth'] = df['sales_rolling_2q'].pct_change() * 100
-
-        # Growth Rates (QoQ and YoY)
-        df['eps_qoq'] = df['eps'].pct_change(periods=1) * 100
-        df['sales_qoq'] = df['revenue'].pct_change(periods=1) * 100
-        df['net_income_qoq'] = df['netIncome'].pct_change(periods=1) * 100
+        df['eps_rolling_2q_growth'] = df['eps_rolling_2q'].pct_change() * 100
         
-        # YoY (4 periods ago)
-        df['eps_yoy'] = df['eps'].pct_change(periods=4) * 100
-        df['sales_yoy'] = df['revenue'].pct_change(periods=4) * 100
+        # 4-Quarter Rolling (for Breakout Chart)
+        df['eps_rolling_4q'] = df['eps'].rolling(window=4).mean()
+        df['eps_prior_high'] = df['eps'].expanding().max().shift(1)
 
-        # ROCE Calculation: EBIT / (Total Assets - Current Liabilities)
-        # Using operatingIncome as proxy for EBIT
+        # Trend Arrows (Last 4 Quarters Slope)
+        def get_trend_arrow(series):
+            if len(series) < 4: return "→"
+            vals = series.tail(4).values
+            x = np.arange(4)
+            slope = np.polyfit(x, vals, 1)[0]
+            # Thresholds: > 3% growth in slope is Up, < -3% is Down
+            if slope > 3: return "↑"
+            if slope < -3: return "↓"
+            return "→"
+
+        # These will be sent for the Table
+        df['sales_trend_arrow'] = df['revenue'].rolling(window=4).apply(lambda x: 1 if get_trend_arrow(pd.Series(x)) == "↑" else (-1 if get_trend_arrow(pd.Series(x)) == "↓" else 0))
+        # Note: polyfit inside rolling apply is slow, better do it once for latest and store in derived.
+        # Let's simplify and just compute for the latest window or per row if needed for full history.
+
+        # Capital Efficiency (ROCE)
         if 'totalAssets' in df.columns and 'totalCurrentLiabilities' in df.columns:
             capital_employed = df['totalAssets'] - df['totalCurrentLiabilities']
-            # Avoid division by zero
-            capital_employed = capital_employed.replace(0, 1)
+            capital_employed = capital_employed.replace(0, 1) # Avoid div by zero
             df['roce'] = (df['operatingIncome'] / capital_employed) * 100
         else:
             df['roce'] = None
 
-        # Yearly Aggregation (Group by Year)
-        df['year'] = df['date'].dt.year
-        yearly_df = df.groupby('year').agg({
-            'eps': 'sum',
-            'revenue': 'sum'
-        }).reset_index()
+        # 3. SCORING ENGINE LAYER (Refined)
+        latest = df.iloc[-1] if not df.empty else None
+        score_obj = {
+            "value": 0, 
+            "grade": "Neutral", 
+            "phase": "Maturity",
+            "diagnostic": "",
+            "contributors": {}, 
+            "warnings": []
+        }
         
-        # Yearly Growth
-        yearly_df['eps_growth'] = yearly_df['eps'].pct_change() * 100
-        yearly_df['revenue_growth'] = yearly_df['revenue'].pct_change() * 100
+        if latest is not None:
+            # BUCKET 1: Growth Consistency (25%) - Lowered weight to make room for Structure
+            sales_growth_yoy = latest.get('sales_yoy_pct', 0)
+            eps_growth_yoy = latest.get('eps_yoy_pct', 0)
+            
+            sales_growth_score = min(max(sales_growth_yoy / 20 * 100, 0), 100)
+            eps_growth_score = min(max(eps_growth_yoy / 25 * 100, 0), 100)
+            
+            # Volatility Penalty (8Q)
+            if len(df) >= 8:
+                sales_vol = df['sales_yoy_pct'].tail(8).std()
+                eps_vol = df['eps_yoy_pct'].tail(8).std()
+                vol_penalty = min((sales_vol + eps_vol) / 2, 30)
+            else:
+                vol_penalty = 0
+            
+            growth_bucket = ((sales_growth_score * 0.10 + eps_growth_score * 0.15) * 100 / 0.25) 
+            growth_bucket = max(growth_bucket - vol_penalty, 0)
 
-        # CAGR (5 Year)
-        eps_cagr = 0
-        sales_cagr = 0
-        if len(yearly_df) >= 5:
-            start_eps = yearly_df.iloc[-5]['eps']
-            end_eps = yearly_df.iloc[-1]['eps']
-            if start_eps > 0 and end_eps > 0:
-                eps_cagr = ((end_eps / start_eps) ** (1/5) - 1) * 100
-                
-            start_sales = yearly_df.iloc[-5]['revenue']
-            end_sales = yearly_df.iloc[-1]['revenue']
-            if start_sales > 0 and end_sales > 0:
-                sales_cagr = ((end_sales / start_sales) ** (1/5) - 1) * 100
+            # NEW BUCKET: Earnings Structure (15%)
+            # Highs/Lows and Compression
+            structure_score = 50 # Start at neutral
+            
+            # 1. Higher High Check
+            is_breakout = latest['eps'] > latest.get('eps_prior_high', 0)
+            if is_breakout:
+                structure_score += 30
+            
+            # 2. Sales vs EPS Divergence
+            is_divergent = sales_growth_yoy > 10 and eps_growth_yoy < 0
+            if is_divergent:
+                structure_score -= 40
+                score_obj["warnings"].append("Profits lagging revenue growth (Margin squeeze)")
+            
+            # 3. Flat Structure Detection
+            is_compressed = False
+            if len(df) >= 4:
+                eps_range = (df['eps'].tail(4).max() - df['eps'].tail(4).min()) / (df['eps'].tail(4).mean() or 1)
+                if eps_range < 0.1 and sales_growth_yoy > 10:
+                    is_compressed = True
+                    structure_score -= 20
+                    score_obj["warnings"].append("Compression: EPS flat despite sales growth")
 
-        # DATA SANITIZATION FOR JSON
-        # 1. Replace Inf/-Inf with NaN
-        import numpy as np
+            structure_bucket = min(max(structure_score, 0), 100)
+
+            # BUCKET 2: Earnings Quality (20%)
+            alignment = 100
+            if sales_growth_yoy > 0 and eps_growth_yoy < 0:
+                alignment = 30
+            
+            other_income_ratio = latest.get('other_income_ratio', 0)
+            oi_score = 100
+            if other_income_ratio > 0.25:
+                oi_score = 0
+                score_obj["warnings"].append(f"High other income dependency ({round(other_income_ratio*100)}%)")
+            elif other_income_ratio > 0.10:
+                oi_score = 50
+                score_obj["warnings"].append(f"Elevated other income ({round(other_income_ratio*100)}%)")
+            
+            quality_bucket = (alignment * 0.10 + oi_score * 0.10) * 100 / 0.20
+
+            # BUCKET 3: Profitability (20%)
+            margin_val = latest.get('net_margin_pct', 0)
+            margin_delta = latest.get('net_margin_yoy_delta', 0)
+            margin_score = min(max(margin_val / 15 * 100, 0), 100)
+            delta_score = 50 + (margin_delta * 10)
+            delta_score = min(max(delta_score, 0), 100)
+            profit_bucket = (margin_score * 0.10 + delta_score * 0.10) * 100 / 0.20
+
+            # BUCKET 4: Efficiency (20%)
+            roce_val = latest.get('roce', 0) or 0
+            roce_score = min(max(roce_val / 20 * 100, 0), 100)
+            efficiency_bucket = roce_score
+
+            # Final Weighted Sum
+            total_value = (growth_bucket * 0.25 + structure_bucket * 0.15 + quality_bucket * 0.20 + profit_bucket * 0.20 + efficiency_bucket * 0.20) / 100
+            score_obj["value"] = round(total_value)
+            
+            if total_value >= 70: score_obj["grade"] = "Strong"
+            elif total_value >= 40: score_obj["grade"] = "Neutral"
+            else: score_obj["grade"] = "Weak"
+            
+            # FUNDAMENTAL PHASE LOGIC
+            if sales_growth_yoy > 15 and eps_growth_yoy > 15:
+                score_obj["phase"] = "Growth"
+            elif is_divergent or (sales_growth_yoy > 5 and eps_growth_yoy < 0):
+                score_obj["phase"] = "Compression"
+            elif sales_growth_yoy < 0 or eps_growth_yoy < -10:
+                score_obj["phase"] = "Deterioration"
+            else:
+                score_obj["phase"] = "Maturity"
+
+            # GENERATE SUMMARIES (Narrative Signals)
+            score_obj["summaries"] = {
+                "growth": f"EPS {eps_growth_yoy:+.1f}% | Sales {sales_growth_yoy:+.1f}%",
+                "structure": ("Sub-par (EPS below prior peak)" if not is_breakout else "Strong (EPS Breakout reached)") if eps_growth_yoy > 0 else "Weak (Deteriorating structure)",
+                "quality": f"{'Healthy' if other_income_ratio < 0.15 else ('Moderate' if other_income_ratio < 0.3 else 'Weak')} (Other income ~{round(other_income_ratio*100)}%)",
+                "profitability": f"Net Margin {margin_val:.1f}% ({margin_delta:+.2f} YoY Δ)",
+                "efficiency": f"ROCE {roce_val:.1f}% ({'Above' if roce_val > 14 else 'Below'} Cost of Capital)"
+            }
+
+            # LEGACY CONTRIBUTORS (Scores for sorting/ranking)
+            score_obj["contributors"] = {
+                "growth": f"{'+' if growth_bucket > 50 else ''}{round((growth_bucket-50)/5)}",
+                "structure": f"{'+' if structure_bucket > 50 else ''}{round((structure_bucket-50)/6)}",
+                "quality": f"{'+' if quality_bucket > 50 else ''}{round((quality_bucket-50)/5)}",
+                "profitability": f"{'+' if profit_bucket > 50 else ''}{round((profit_bucket-50)/5)}",
+                "efficiency": f"{'+' if efficiency_bucket > 50 else ''}{round((efficiency_bucket-50)/5)}"
+            }
+
+            # DIAGNOSTIC SENTENCE GENERATION
+            growth_desc = "strong" if growth_bucket > 70 else ("decelerating" if growth_bucket < 40 else "stable")
+            margin_desc = "expanding" if margin_delta > 0.5 else ("contracting" if margin_delta < -0.5 else "steady")
+            
+            diag = f"Business is in a {score_obj['phase']} phase. "
+            if eps_growth_yoy > sales_growth_yoy:
+                diag += f"Earnings growth ({round(eps_growth_yoy,1)}%) is outpacing sales, driven by {margin_desc} margins."
+            elif is_divergent:
+                diag += f"EPS growth is negative despite positive sales, indicating persistent margin pressure."
+            else:
+                diag += f"Both sales and earnings show {growth_desc} momentum with {margin_desc} ROCE ({round(roce_val,1)}%)."
+            
+            score_obj["diagnostic"] = diag
+
+        # Data Sanitization for Trend Arrows
+        # We compute trend for the latest quarter to avoid polyfit on every row
+        def calc_trend_for_latest(series):
+            if len(series) < 4: return "→"
+            vals = series.tail(4).values
+            x = np.arange(4)
+            slope = np.polyfit(x, vals, 1)[0]
+            avg = series.tail(4).mean() or 1
+            rel_slope = slope / avg
+            if rel_slope > 0.05: return "↑" # > 5% trend
+            if rel_slope < -0.05: return "↓" # < -5% trend
+            return "→"
+        
+        sales_trend = calc_trend_for_latest(df['revenue'])
+        eps_trend = calc_trend_for_latest(df['eps'])
+
+        # 4. DATA SANITIZATION & LAYERING
         df = df.replace([np.inf, -np.inf], np.nan)
-        yearly_df = yearly_df.replace([np.inf, -np.inf], np.nan)
-
-        # 2. Convert NaN to None (valid JSON null)
-        # Also ensure 'date' is string, not Timestamp
-        if 'date' in df.columns:
-             df['date'] = df['date'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else None)
+        df['date'] = df['date'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else None)
+        df_clean = df.astype(object).where(pd.notnull(df), None)
         
-        # KEY FIX: Cast to object ensures None is preserved and not coerced back to NaN
-        df_obj = df.astype(object).where(pd.notnull(df), None)
-        yearly_obj = yearly_df.astype(object).where(pd.notnull(yearly_df), None)
-             
-        # 3. Trim columns for payload optimization (Restoring essential columns)
-        essential_cols = [
-            'date', 'period', 'calendarYear', 'eps', 'revenue', 
-            'net_margin', 'eps_qoq', 'sales_qoq', 'eps_yoy', 
-            'sales_yoy', 'roce', 'other_income_pct', 'eps_rolling_2q_growth', 
-            'sales_rolling_2q_growth'
-        ]
-        available_cols = [c for c in essential_cols if c in df_obj.columns]
-        
-        quarterly_data = df_obj.sort_values('date', ascending=False)[available_cols].to_dict(orient='records')
-        yearly_data = yearly_obj.sort_values('year', ascending=False).to_dict(orient='records')
+        # Reverse for UI (Latest first)
+        df_ui = df_clean.sort_values('date', ascending=False)
 
+        # Layered Return
         return {
-            "quarterly": quarterly_data,
-            "yearly": yearly_data,
-            "cagr": {
-                "eps_5y": round(float(eps_cagr), 2),
-                "sales_5y": round(float(sales_cagr), 2)
+            "score": score_obj,
+            "raw": {
+                "quarterly": df_ui[['date', 'period', 'calendarYear', 'revenue', 'eps', 'netIncome', 'otherIncome', 'operatingIncome']].to_dict(orient='records'),
+                "annual": [] # To be implemented in Phase 2
+            },
+            "derived": {
+                "yoy": df_ui[['date', 'sales_yoy_pct', 'eps_yoy_pct', 'net_income_yoy_pct', 'net_margin_pct', 'net_margin_yoy_delta', 'other_income_ratio', 'other_income_3y_avg']].to_dict(orient='records'),
+                "momentum": df_ui[['date', 'sales_rolling_2q_growth', 'eps_rolling_2q_growth']].to_dict(orient='records'),
+                "efficiency": df_ui[['date', 'roce']].to_dict(orient='records'),
+                "structure": {
+                    "latest_trends": {"sales": sales_trend, "eps": eps_trend},
+                    "historical": df_ui[['date', 'eps_rolling_4q', 'eps_prior_high']].to_dict(orient='records')
+                }
             }
         }
