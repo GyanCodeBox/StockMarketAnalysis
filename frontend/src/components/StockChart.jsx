@@ -3,9 +3,10 @@ import { createChart, ColorType } from 'lightweight-charts'
 import ChartSettings, { TIMEFRAME_DEFAULTS } from './ChartSettings'
 import QuickMAToggles from './QuickMAToggles'
 import StructureDetailPanel from './StructureDetailPanel'
+import RegimeTimeline from './RegimeTimeline'
 import { Calendar, Clock, Loader2 } from 'lucide-react'
 
-function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], distributionZones = [], failedBreakouts = [], isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh, selectedStructure, onSelectStructure }) {
+function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], distributionZones = [], failedBreakouts = [], marketStructure, isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh, selectedStructure, onSelectStructure }) {
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
@@ -29,6 +30,7 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
   const [failedMarkers, setFailedMarkers] = useState([])
   const [hoverFailure, setHoverFailure] = useState(null)
   const [selectedFailure, setSelectedFailure] = useState(null)
+  const [highlightedStructure, setHighlightedStructure] = useState(null)
 
   // Load initial MA config from local storage or use defaults
   useEffect(() => {
@@ -100,6 +102,34 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
       document.body.style.overflow = 'unset'
     }
   }, [isMaximized])
+
+  const handleTimelineSegmentClick = useCallback((segment) => {
+    if (!segment || segment.bias === 'NEUTRAL') return;
+
+    let sourceArray = [];
+    if (segment.bias === 'ACCUMULATION') sourceArray = accumulationZones;
+    else if (segment.bias === 'DISTRIBUTION') sourceArray = distributionZones;
+    else if (segment.bias === 'FAILED_BREAKOUT') sourceArray = failedBreakouts;
+
+    const matchingZone = sourceArray.find(z => {
+      const zStart = z.start_time || z.breakout_time || z.time;
+      const zEnd = z.end_time || z.failure_time || z.time;
+      const sStart = typeof zStart === 'string' ? zStart : new Date(zStart).toISOString().split('T')[0];
+      return sStart <= segment.start_time && (!zEnd || (typeof zEnd === 'string' ? zEnd : new Date(zEnd).toISOString().split('T')[0]) >= segment.start_time);
+    });
+
+    if (matchingZone && chartRef.current) {
+      setHighlightedStructure({ type: segment.bias, data: matchingZone });
+
+      // 1. Ensure overlays/markers are show
+      if (!showZones && (segment.bias === 'ACCUMULATION' || segment.bias === 'DISTRIBUTION')) {
+        handleToggleZones();
+      }
+      if (!showFailedBreakouts && segment.bias === 'FAILED_BREAKOUT') {
+        handleToggleFailedBreakouts();
+      }
+    }
+  }, [accumulationZones, distributionZones, failedBreakouts, showZones, handleToggleZones, showFailedBreakouts, handleToggleFailedBreakouts]);
 
   // Zoom handlers
   const handleZoomIn = useCallback(() => {
@@ -805,30 +835,55 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
         {/* Failed breakout markers */}
         {showFailedBreakouts && failedMarkers.length > 0 && (
           <div className="absolute inset-0 z-[18] pointer-events-none">
-            {failedMarkers.map((m) => (
-              <div
-                key={m.id}
-                className="absolute flex items-center justify-center"
-                style={{
-                  left: m.x - 6,
-                  top: m.y - 6,
-                  width: 12,
-                  height: 12,
-                  pointerEvents: 'auto',
-                }}
-                onMouseEnter={() => setHoverFailure(m.event)}
-                onMouseLeave={() => setHoverFailure(null)}
-                onClick={() => setSelectedFailure(m.event)}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  setSelectedFailure(m.event)
-                }}
-              >
-                <div className="w-3 h-3 rounded-full border border-amber-400 bg-amber-500/20 flex items-center justify-center text-[9px] text-amber-300">
-                  !
+            {failedMarkers.map((m) => {
+              const isTimelineSelected = (selectedStructure?.type === 'FAILED_BREAKOUT' &&
+                (selectedStructure.data.failure_time === m.event.failure_time ||
+                  selectedStructure.data.breakout_time === m.event.breakout_time)) ||
+                (highlightedStructure?.type === 'FAILED_BREAKOUT' &&
+                  (highlightedStructure.data.failure_time === m.event.failure_time ||
+                    highlightedStructure.data.breakout_time === m.event.breakout_time));
+
+              const isLocalSelected = selectedFailure && (selectedFailure.id === m.event.id ||
+                (selectedFailure.failure_time === m.event.failure_time &&
+                  selectedFailure.breakout_time === m.event.breakout_time));
+              const isSelected = isTimelineSelected || isLocalSelected;
+
+              return (
+                <div
+                  key={m.id}
+                  className={`absolute flex items-center justify-center transition-all duration-300
+                    ${isSelected ? 'z-10 ring-4 ring-amber-500/30 scale-125 shadow-[0_0_15px_rgba(251,191,36,0.4)]' : 'hover:scale-110'}
+                  `}
+                  style={{
+                    left: m.x - 6,
+                    top: m.y - 6,
+                    width: 12,
+                    height: 12,
+                    pointerEvents: 'auto',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={() => setHoverFailure(m.event)}
+                  onMouseLeave={() => setHoverFailure(null)}
+                  onClick={() => {
+                    setSelectedFailure(m.event);
+                    setHighlightedStructure({ type: 'FAILED_BREAKOUT', data: m.event });
+                    onSelectStructure({ type: 'FAILED_BREAKOUT', data: m.event });
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setSelectedFailure(m.event)
+                    setHighlightedStructure({ type: 'FAILED_BREAKOUT', data: m.event });
+                    onSelectStructure({ type: 'FAILED_BREAKOUT', data: m.event });
+                  }}
+                >
+                  <div className={`w-3 h-3 rounded-full border bg-amber-500/20 flex items-center justify-center text-[9px] text-amber-300
+                    ${isSelected ? 'border-amber-200 bg-amber-500/40' : 'border-amber-400'}
+                  `}>
+                    !
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {hoverFailure && (
               <div
                 className="absolute bg-slate-900/95 border border-amber-500/50 text-xs text-slate-100 px-3 py-2 rounded shadow-xl"
@@ -847,32 +902,48 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
         {/* Market Structure Zones overlay */}
         {showZones && zoneOverlays.length > 0 && (
           <div className="absolute inset-0 z-[15] pointer-events-none">
-            {zoneOverlays.map((rect) => (
-              <div
-                key={rect.id}
-                className="absolute rounded-sm"
-                style={{
-                  left: rect.left,
-                  width: rect.width,
-                  top: rect.top,
-                  height: rect.height || 1,
-                  background: rect.type === 'DISTRIBUTION'
-                    ? 'linear-gradient(180deg, rgba(244,63,94,0.08), rgba(190,18,60,0.12))'
-                    : 'linear-gradient(180deg, rgba(59,130,246,0.08), rgba(16,185,129,0.12))',
-                  border: rect.type === 'DISTRIBUTION'
-                    ? '1px solid rgba(244,63,94,0.35)'
-                    : '1px solid rgba(14,165,233,0.35)',
-                  pointerEvents: 'auto',
-                }}
-                onMouseEnter={() => setHoverStructure({ type: rect.type, data: rect.zone })}
-                onMouseLeave={() => setHoverStructure(null)}
-                onClick={() => onSelectStructure({ type: rect.type, data: rect.zone })}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  onSelectStructure({ type: rect.type, data: rect.zone })
-                }}
-              />
-            ))}
+            {zoneOverlays.map((rect) => {
+              const rectStart = rect.zone.start_time;
+              const isSelected = (selectedStructure?.data &&
+                (selectedStructure.type === rect.type) &&
+                (selectedStructure.data.start_time === rectStart)) ||
+                (highlightedStructure?.data &&
+                  (highlightedStructure.type === rect.type) &&
+                  (highlightedStructure.data.start_time === rectStart));
+
+              return (
+                <div
+                  key={rect.id}
+                  className={`absolute rounded-sm transition-all duration-300 ${isSelected ? 'ring-4 ring-white/50 z-20' : 'z-10'}`}
+                  style={{
+                    left: rect.left,
+                    width: rect.width,
+                    top: rect.top,
+                    height: rect.height || 1,
+                    background: rect.type === 'DISTRIBUTION'
+                      ? (isSelected ? 'rgba(244,63,94,0.4)' : 'linear-gradient(180deg, rgba(244,63,94,0.08), rgba(190,18,60,0.12))')
+                      : (isSelected ? 'rgba(16,185,129,0.4)' : 'linear-gradient(180deg, rgba(59,130,246,0.08), rgba(16,185,129,0.12))'),
+                    border: isSelected
+                      ? '2px solid white'
+                      : (rect.type === 'DISTRIBUTION' ? '1px solid rgba(244,63,94,0.35)' : '1px solid rgba(14,165,233,0.35)'),
+                    pointerEvents: 'auto',
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? '0 0 20px rgba(255,255,255,0.3)' : 'none',
+                  }}
+                  onMouseEnter={() => setHoverStructure({ type: rect.type, data: rect.zone })}
+                  onMouseLeave={() => setHoverStructure(null)}
+                  onClick={() => {
+                    setHighlightedStructure({ type: rect.type, data: rect.zone });
+                    onSelectStructure({ type: rect.type, data: rect.zone });
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setHighlightedStructure({ type: rect.type, data: rect.zone });
+                    onSelectStructure({ type: rect.type, data: rect.zone });
+                  }}
+                />
+              );
+            })}
             {hoverStructure && (
               <div
                 className="absolute bg-slate-900/95 border border-slate-700 text-xs text-slate-200 px-3 py-2 rounded shadow-xl"
@@ -985,6 +1056,15 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
           type={selectedStructure.type}
           data={selectedStructure.data}
           onClose={() => onSelectStructure(null)}
+        />
+      )}
+
+      {/* Regime History Timeline */}
+      {marketStructure?.regime_history?.length > 0 && (
+        <RegimeTimeline
+          regimeHistory={marketStructure.regime_history}
+          timeframe={ohlcData?.interval || 'day'}
+          onSegmentClick={handleTimelineSegmentClick}
         />
       )}
 

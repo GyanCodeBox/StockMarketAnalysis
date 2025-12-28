@@ -204,6 +204,7 @@ function App() {
                     onTimeframeChange={(newTf) => handleAnalyze(symbol, exchange, newTf)}
                     loading={loading}
                     onRefresh={() => handleAnalyze(symbol, exchange, techData.ohlc_data.interval)}
+                    marketStructure={techData.market_structure}
                     selectedStructure={selectedStructure}
                     onSelectStructure={setSelectedStructure}
                   />

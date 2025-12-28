@@ -20,6 +20,7 @@ class MarketStructureState:
     details: Dict[str, Any] = field(default_factory=dict)
     transition_narration: Optional[str] = None
     transition: Optional[Dict[str, str]] = None
+    regime_history: List[Dict[str, Any]] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -28,7 +29,8 @@ class MarketStructureState:
             "explanation": self.explanation,
             "details": self.details,
             "transition_narration": self.transition_narration,
-            "transition": self.transition
+            "transition": self.transition,
+            "regime_history": self.regime_history
         }
 
 class MarketStructureService:
@@ -79,20 +81,36 @@ class MarketStructureService:
                 )
             
             # --- Decision Matrix Logic ---
+            # Now handled by resolve_bias helper for consistency with Regime History
             latest_failure = failed_breakouts[-1] if failed_breakouts else None
             latest_distribution = distribution_zones[-1] if distribution_zones else None
             latest_accumulation = accumulation_zones[-1] if accumulation_zones else None
             
+            bias, confidence = self.resolve_bias(
+                [latest_accumulation] if latest_accumulation else [],
+                [latest_distribution] if latest_distribution else [],
+                [latest_failure] if latest_failure else []
+            )
+
             state = None
-            if latest_failure:
+            if bias == "FAILED_BREAKOUT":
                 state = self._create_failed_breakout_state(latest_failure)
-            elif latest_distribution:
+            elif bias == "DISTRIBUTION":
                 state = self._create_distribution_state(latest_distribution)
-            elif latest_accumulation:
+            elif bias == "ACCUMULATION":
                 state = self._create_accumulation_state(latest_accumulation)
             else:
-                # Rule 4: Neutral Default
-                state = self._get_neutral_state(ohlc_data)
+                 state = self._get_neutral_state(ohlc_data)
+
+            # --- Regime History Generation ---
+            from app.services.regime_history_service import RegimeHistoryService
+            regime_service = RegimeHistoryService(self)
+            state.regime_history = regime_service.generate_history(
+                ohlc_data,
+                accumulation_zones if accumulation_zones else [],
+                distribution_zones if distribution_zones else [],
+                failed_breakouts if failed_breakouts else []
+            )
 
             # --- Transition Narration ---
             if previous_bias and previous_bias != state.bias and state.bias != "NEUTRAL":
@@ -109,6 +127,31 @@ class MarketStructureService:
                 explanation="Error evaluating market structure.",
                 details={"error": str(e)}
             )
+
+    def resolve_bias(
+        self,
+        active_acc: List[Dict[str, Any]],
+        active_dist: List[Dict[str, Any]],
+        active_fail: List[Dict[str, Any]]
+    ) -> tuple[str, str]:
+        """
+        Public helper to resolve competing signals for a time slice.
+        Priority: Failed Breakout > Distribution > Accumulation > Neutral
+        Returns: (bias, confidence)
+        """
+        if active_fail:
+             return "FAILED_BREAKOUT", "High" # Failures are high confidence events
+        
+        if active_dist:
+             # Take the 'strongest' or most recent if multiple
+             zone = active_dist[-1]
+             return "DISTRIBUTION", zone.get("confidence", "Medium")
+             
+        if active_acc:
+             zone = active_acc[-1]
+             return "ACCUMULATION", zone.get("confidence", "Medium")
+             
+        return "NEUTRAL", "Low"
 
     def _get_neutral_state(self, ohlc_data: Dict[str, Any]) -> MarketStructureState:
         # Provide some "evidence" for Neutral state hovers
