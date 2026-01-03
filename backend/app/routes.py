@@ -25,6 +25,7 @@ class AnalyzeRequest(BaseModel):
     timeframe: Optional[str] = Field(default="day", description="Timeframe: 'day', 'week', 'hour', '15minute', '5minute'")
     moving_averages: Optional[List[MovingAverageConfig]] = Field(default=None, description="Custom MA configurations")
     previous_bias: Optional[str] = Field(default=None, description="Previous market structure bias for transition narration")
+    mode: Optional[str] = Field(default="full", description="Analysis mode: 'full' or 'metrics_only'")
 
 class AnalyzeResponse(BaseModel):
     symbol: str
@@ -354,7 +355,18 @@ async def analyze_summary(request: AnalyzeRequest):
                 ]
                 q, ohlc = await asyncio.gather(*tasks_tech)
                 indicators = tech.calculate_indicators(ohlc, q.get("last_price", 0))
-                return {"quote": q, "indicators": indicators, "ohlc_data": ohlc}
+                
+                # Calculate Market Structure for Portfolio View
+                from app.services.market_structure_service import MarketStructureService
+                ms_service = MarketStructureService()
+                ms_state = ms_service.evaluate_structure(ohlc, indicators)
+                
+                return {
+                    "quote": q, 
+                    "indicators": indicators, 
+                    "ohlc_data": ohlc,
+                    "market_structure": ms_state.to_dict()
+                }
             
             tasks.append(get_tech())
         else:
@@ -388,11 +400,21 @@ async def analyze_summary(request: AnalyzeRequest):
             symbol=symbol,
             quote=t_data["quote"],
             indicators=t_data["indicators"],
-            fundamental_data=f_data
+            fundamental_data=f_data,
+            mode=request.mode
         )
         
         # 5. Cache and return
         cache_manager.set(summary_cache_key, analysis, ttl_seconds=900)
+        
+        if request.mode == "metrics_only":
+            # Return full structural data for Portfolio View
+            return {
+                "analysis": analysis, # Empty string
+                "technical": t_data,
+                "fundamental": f_data
+            }
+            
         return {"analysis": analysis}
         
     except Exception as e:

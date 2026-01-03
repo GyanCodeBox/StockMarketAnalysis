@@ -57,11 +57,18 @@ class LLMService:
         symbol: str,
         quote: Dict[str, Any],
         indicators: Dict[str, Any],
-        fundamental_data: Optional[Dict[str, Any]] = None
+        fundamental_data: Optional[Dict[str, Any]] = None,
+        mode: str = "full"
     ) -> str:
         """
         Generate AI-powered stock analysis (Async)
+        
+        Args:
+            mode: "full" (default) or "metrics_only" to skip LLM text generation
         """
+        if mode == "metrics_only":
+            return ""
+
         # Prepare prompt
         prompt = self._build_analysis_prompt(symbol, quote, indicators, fundamental_data)
         
