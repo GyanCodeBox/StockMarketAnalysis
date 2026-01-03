@@ -44,8 +44,16 @@ const PortfolioTable = ({ stocks }) => {
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:text-white transition-colors">
                                 Confluence State
                             </th>
-                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-right cursor-pointer hover:text-white transition-colors">
-                                Composite Score
+                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-right cursor-pointer hover:text-white transition-colors group">
+                                <div className="flex items-center justify-end gap-1">
+                                    Composite Score
+                                    <div className="relative group/tooltip">
+                                        <Info className="w-3 h-3 text-slate-500 hover:text-indigo-400" />
+                                        <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-slate-900 border border-slate-700 text-slate-300 text-[10px] rounded shadow-xl hidden group-hover/tooltip:block z-50 normal-case font-normal leading-relaxed">
+                                            Score measures momentum. Confluence measures structure. Portfolio risk is driven by structure.
+                                        </div>
+                                    </div>
+                                </div>
                             </th>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center cursor-pointer hover:text-white transition-colors">
                                 Risk Level
