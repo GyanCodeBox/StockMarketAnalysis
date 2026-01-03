@@ -84,7 +84,7 @@ const PortfolioInput = ({ onAnalyze, loading }) => {
                     </>
                 ) : (
                     <>
-                        Start Analysis <ArrowRight size={16} />
+                        Run Portfolio Scan <ArrowRight size={16} />
                     </>
                 )}
             </button>

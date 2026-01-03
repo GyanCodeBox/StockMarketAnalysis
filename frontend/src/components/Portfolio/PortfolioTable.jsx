@@ -15,6 +15,20 @@ const RISK_COLORS = {
     'LOW': 'text-slate-400'
 };
 
+const DISPLAY_MAPPINGS = {
+    'Early Opportunity': 'Emerging Alignment',
+    'Monitor': 'Ongoing Review',
+    'MONITOR': 'ONGOING REVIEW',
+    'Stable': 'No Immediate Risk',
+    'STABLE': 'NO IMM. RISK', // Condensed for badge
+    'High Risk': 'Elevated Risk',
+    'HIGH': 'ELEVATED', // Risk Level
+    'LOW': 'MINIMAL',
+    'Start Analysis': 'Run Portfolio Scan'
+};
+
+const formatDisplay = (val) => DISPLAY_MAPPINGS[val] || val;
+
 const PortfolioTable = ({ stocks }) => {
     const navigate = useNavigate();
     const [sortConfig, setSortConfig] = useState({ key: 'attention_flag', direction: 'asc' });
@@ -22,12 +36,6 @@ const PortfolioTable = ({ stocks }) => {
     const handleRowClick = (symbol) => {
         navigate(`/analyze/${symbol}`);
     };
-
-    const sortedStocks = [...stocks].sort((a, b) => {
-        // Custom sort logic would go here, simplified purely on key for now
-        // For flags, we might map to priority ints
-        return 0;
-    });
 
     if (!stocks || stocks.length === 0) return null;
 
@@ -49,8 +57,8 @@ const PortfolioTable = ({ stocks }) => {
                                     Composite Score
                                     <div className="relative group/tooltip">
                                         <Info className="w-3 h-3 text-slate-500 hover:text-indigo-400" />
-                                        <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-slate-900 border border-slate-700 text-slate-300 text-[10px] rounded shadow-xl hidden group-hover/tooltip:block z-50 normal-case font-normal leading-relaxed">
-                                            Score measures momentum. Confluence measures structure. Portfolio risk is driven by structure.
+                                        <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-slate-900 border border-slate-700 text-slate-300 text-[10px] rounded shadow-xl hidden group-hover/tooltip:block z-50 normal-case font-normal leading-relaxed">
+                                            Composite score reflects relative regime quality across the analyzed universe. Not a return expectation.
                                         </div>
                                     </div>
                                 </div>
@@ -80,29 +88,34 @@ const PortfolioTable = ({ stocks }) => {
                                     <div className="font-bold text-white group-hover:text-indigo-300 transition-colors">{stock.symbol}</div>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className="text-sm text-slate-300">{stock.confluence_state}</span>
+                                    <span className="text-sm text-slate-300">{formatDisplay(stock.confluence_state)}</span>
                                     {stock.details?.confluence_fmt && (
-                                        <div className="text-[10px] text-slate-500 mt-0.5">{stock.details.confluence_fmt}</div>
+                                        <div className="text-[10px] text-slate-500 mt-0.5 font-medium lowercase">
+                                            {stock.details.confluence_fmt.toLowerCase().replace(' + ', ' · ')}
+                                        </div>
                                     )}
                                 </td>
                                 <td className="px-6 py-4 text-right font-mono text-slate-300">
                                     {stock.composite_score.toFixed(0)}
                                 </td>
                                 <td className={`px-6 py-4 text-center text-xs ${RISK_COLORS[stock.risk_level] || 'text-slate-400'}`}>
-                                    {stock.risk_level}
+                                    {formatDisplay(stock.risk_level)}
                                 </td>
                                 <td className="px-6 py-4 text-xs text-slate-400 max-w-[200px] truncate" title={stock.key_constraint}>
                                     {stock.key_constraint || <span className="text-slate-600 italic">None</span>}
                                 </td>
                                 <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
+                                    <div
+                                        className="flex items-center gap-2"
+                                        title={stock.stability_status === 'Stable' ? "Stable: Regime persistence above historical median" : "Unstable: Recent regime transitions (high change frequency)"}
+                                    >
                                         <div className={`w-1.5 h-1.5 rounded-full ${stock.stability_status === 'Stable' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
                                         <span className="text-xs text-slate-300">{stock.stability_status}</span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     <span className={`px-2.5 py-1 rounded text-[10px] font-bold border ${ATTENTION_COLORS[stock.attention_flag] || 'text-slate-400 border-slate-800'}`}>
-                                        {stock.attention_flag}
+                                        {formatDisplay(stock.attention_flag)}
                                     </span>
                                 </td>
                             </tr>
@@ -114,7 +127,7 @@ const PortfolioTable = ({ stocks }) => {
             {/* Footer / Meta */}
             <div className="px-6 py-3 bg-slate-950 border-t border-slate-800 text-[10px] text-slate-500 flex justify-between items-center">
                 <span>Showing {stocks.length} instruments</span>
-                <span className="italic">Data timestamp: Just now</span>
+                <span className="italic">Portfolio View is a monitoring and prioritization layer. It does not generate signals or recommendations.</span>
             </div>
         </div>
     );
