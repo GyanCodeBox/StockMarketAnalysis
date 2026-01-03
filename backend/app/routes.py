@@ -355,7 +355,18 @@ async def analyze_summary(request: AnalyzeRequest):
                 ]
                 q, ohlc = await asyncio.gather(*tasks_tech)
                 indicators = tech.calculate_indicators(ohlc, q.get("last_price", 0))
-                return {"quote": q, "indicators": indicators, "ohlc_data": ohlc}
+                
+                # Calculate Market Structure for Portfolio View
+                from app.services.market_structure_service import MarketStructureService
+                ms_service = MarketStructureService()
+                ms_state = ms_service.evaluate_structure(ohlc, indicators)
+                
+                return {
+                    "quote": q, 
+                    "indicators": indicators, 
+                    "ohlc_data": ohlc,
+                    "market_structure": ms_state.to_dict()
+                }
             
             tasks.append(get_tech())
         else:
