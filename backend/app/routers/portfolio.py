@@ -144,7 +144,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             
             if high_risk_count >= 2:
                 attention = "CRITICAL"
-            elif confluence['status'] in ["Structural Risk", "Drift Risk"]:
+            elif confluence['state'] in ["Structural Risk", "Drift Risk"]:
                 attention = "REVIEW"
             elif composite < 50 or tech_stab.get("stability_score", 50) < 40: # Stability threshold example
                 attention = "MONITOR"
@@ -153,7 +153,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
 
             result = {
                 "symbol": sym,
-                "confluence_state": confluence['status'],
+                "confluence_state": confluence['state'],
                 "composite_score": composite,
                 "risk_level": risk_level_str,
                 "key_constraint": risk_constraints[0]['name'] if risk_constraints else None,
@@ -162,7 +162,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
                 "details": {
                     "tech_regime": tech_regime,
                     "funda_regime": funda_regime,
-                    "confluence_fmt": f"{confluence['technical']} + {confluence['fundamental']}",
+                    "confluence_fmt": f"{confluence['technical_regime']} + {confluence['fundamental_regime']}",
                 }
             }
             
@@ -170,6 +170,9 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             return result
 
         except Exception as e:
+            print(f"CRITICAL PORTFOLIO ERROR: {e}")
+            import traceback
+            traceback.print_exc()
             return {"symbol": sym, "error": str(e), "attention": "Critical"}
 
     # Run all analyses in parallel
