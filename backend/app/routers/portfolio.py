@@ -76,22 +76,6 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             # This returns { "structural_data": ..., "technical": ..., "fundamental": ... }
             result_data = await analyze_summary(req)
             
-            # DEBUG LOGGING
-            print(f"DEBUG [{sym}]: Keys in result_data: {result_data.keys()}")
-            
-            tech_data = result_data.get("technical", {})
-            fund_data = result_data.get("fundamental", {})
-
-            print(f"DEBUG [{sym}]: Tech Data Keys: {tech_data.keys() if tech_data else 'None'}")
-            print(f"DEBUG [{sym}]: Fund Data Keys: {fund_data.keys() if fund_data else 'None'}")
-            
-            if not tech_data or not fund_data:
-                 return {
-                    "symbol": sym, 
-                    "error": True, 
-                    "attention": "Review"
-                }
-
             # Extract Metrics
             # Market Structure uses 'bias', not 'current_bias'
             ms_data = tech_data.get("market_structure", {}) or {}
@@ -157,7 +141,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
                 "confluence_state": confluence['state'],
                 "composite_score": composite_val,
                 "risk_level": risk_level_str,
-                "key_constraint": risk_constraints[0]['name'] if risk_constraints else None,
+                "key_constraint": risk_constraints[0]['dimension'] if risk_constraints else None,
                 "stability_status": "Stable" if tech_stab.get("stability_score", 0) > 60 else "Unstable",
                 "attention_flag": attention,
                 "details": {
