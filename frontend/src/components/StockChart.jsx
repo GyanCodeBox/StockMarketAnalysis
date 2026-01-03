@@ -6,7 +6,13 @@ import StructureDetailPanel from './StructureDetailPanel'
 import RegimeTimeline from './RegimeTimeline'
 import { Calendar, Clock, Loader2 } from 'lucide-react'
 
-function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [], distributionZones = [], failedBreakouts = [], marketStructure, isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh, selectedStructure, onSelectStructure }) {
+const EMPTY_ARRAY = [];
+
+function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones: _accumulationZones, distributionZones: _distributionZones, failedBreakouts: _failedBreakouts, marketStructure, isMaximized, onToggleMaximize, onTimeframeChange, loading, onRefresh, selectedStructure, onSelectStructure }) {
+  const accumulationZones = _accumulationZones || EMPTY_ARRAY;
+  const distributionZones = _distributionZones || EMPTY_ARRAY;
+  const failedBreakouts = _failedBreakouts || EMPTY_ARRAY;
+
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const candlestickSeriesRef = useRef(null)
