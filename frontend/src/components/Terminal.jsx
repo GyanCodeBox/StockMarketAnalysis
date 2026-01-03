@@ -27,11 +27,7 @@ function Terminal() {
     const [selectedStructure, setSelectedStructure] = useState(null)
 
     // Auto-trigger analysis if URL param exists
-    useEffect(() => {
-        if (urlSymbol && urlSymbol !== symbol && !loading) {
-            handleAnalyze(urlSymbol, 'NSE');
-        }
-    }, [urlSymbol, handleAnalyze]);
+
 
     // Handle Escape key to exit fullscreen
     useEffect(() => {
