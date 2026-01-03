@@ -105,6 +105,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             
             # Latest fundamental for risk
             latest_funda = {}
+            has_valid_funda = False
             if fund_data.get("raw", {}).get("quarterly"):
                 latest_derived = fund_data.get("derived", {}).get("yoy", [{}])[0]
                 latest_eff = fund_data.get("derived", {}).get("efficiency", [{}])[0]
@@ -114,6 +115,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
                     "net_margin_pct": latest_derived.get("net_margin_pct", 0),
                     "net_margin_yoy_delta": latest_derived.get("net_margin_yoy_delta", 0)
                 }
+                has_valid_funda = True
 
             # Calculation
             confluence = ConfluenceService.get_confluence_state(tech_regime, funda_regime)
@@ -124,16 +126,23 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             )
             composite_val = composite_result.get("value", 50)
             
-            risk_constraints = RiskConstraintService.assess_risk_constraints(
-                latest_funda, {"regime": tech_regime, "confidence": tech_conf}
-            )
+            risk_constraints = []
+            if has_valid_funda:
+                risk_constraints = RiskConstraintService.assess_risk_constraints(
+                    latest_funda, {"regime": tech_regime, "confidence": tech_conf}
+                )
+            
             risk_summary = RiskConstraintService.get_risk_summary(risk_constraints)
             
             # Attention Logic (PRD 7.1)
             attention = "STABLE"
             risk_level_str = "LOW"
-            if risk_summary.get("severity") == "HIGH": risk_level_str = "HIGH"
-            elif risk_summary.get("severity") == "MEDIUM": risk_level_str = "MEDIUM"
+            
+            # Fix: Use 'overall_risk' key from risk_summary
+            if "HIGH" in risk_summary.get("overall_risk", "LOW"): 
+                risk_level_str = "HIGH"
+            elif "MEDIUM" in risk_summary.get("overall_risk", "LOW"): 
+                risk_level_str = "MEDIUM"
 
             high_risk_count = len([c for c in risk_constraints if c['severity'] == 'HIGH'])
             
@@ -151,7 +160,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
                 "confluence_state": confluence['state'],
                 "composite_score": composite_val,
                 "risk_level": risk_level_str,
-                "key_constraint": risk_constraints[0]['dimension'] if risk_constraints else None,
+                "key_constraint": risk_constraints[0]['dimension'] if risk_constraints else "None",
                 "stability_status": "Stable" if tech_stab.get("stability_score", 0) > 60 else "Unstable",
                 "attention_flag": attention,
                 "details": {
