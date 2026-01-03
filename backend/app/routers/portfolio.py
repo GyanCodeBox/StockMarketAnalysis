@@ -76,6 +76,16 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             # This returns { "structural_data": ..., "technical": ..., "fundamental": ... }
             result_data = await analyze_summary(req)
             
+            tech_data = result_data.get("technical", {})
+            fund_data = result_data.get("fundamental", {})
+            
+            if not tech_data or not fund_data:
+                 return {
+                    "symbol": sym, 
+                    "error": True, 
+                    "attention": "Review"
+                }
+
             # Extract Metrics
             # Market Structure uses 'bias', not 'current_bias'
             ms_data = tech_data.get("market_structure", {}) or {}
@@ -88,7 +98,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             raw_score = indicators.get("technical_score", 50)
             tech_score = raw_score if isinstance(raw_score, (int, float)) else raw_score.get("score", 50)
             
-            funda_score_obj = fund_data.get("score", {})
+            funda_score_obj = fund_data.get("score") or {}
             funda_regime = funda_score_obj.get("grade", "NEUTRAL")
             funda_score = funda_score_obj.get("value", 50)
             funda_phase = funda_score_obj.get("phase", "Maturity")
