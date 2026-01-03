@@ -76,8 +76,14 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             # This returns { "structural_data": ..., "technical": ..., "fundamental": ... }
             result_data = await analyze_summary(req)
             
+            # DEBUG LOGGING
+            print(f"DEBUG [{sym}]: Keys in result_data: {result_data.keys()}")
+            
             tech_data = result_data.get("technical", {})
             fund_data = result_data.get("fundamental", {})
+
+            print(f"DEBUG [{sym}]: Tech Data Keys: {tech_data.keys() if tech_data else 'None'}")
+            print(f"DEBUG [{sym}]: Fund Data Keys: {fund_data.keys() if fund_data else 'None'}")
             
             if not tech_data or not fund_data:
                  return {
@@ -87,10 +93,16 @@ async def get_portfolio_summary(input_data: PortfolioInput):
                 }
 
             # Extract Metrics
-            tech_regime = tech_data.get("market_structure", {}).get("current_bias", "NEUTRAL")
-            tech_conf = tech_data.get("market_structure", {}).get("confidence", "MEDIUM")
-            tech_score = tech_data.get("indicators", {}).get("technical_score", {}).get("score", 50)
-            regime_hist = tech_data.get("market_structure", {}).get("regime_history", [])
+            # Market Structure uses 'bias', not 'current_bias'
+            ms_data = tech_data.get("market_structure", {}) or {}
+            tech_regime = ms_data.get("bias", "NEUTRAL")
+            tech_conf = ms_data.get("confidence", "MEDIUM")
+            regime_hist = ms_data.get("regime_history", [])
+
+            # Technical Score is a float in TechnicalTool
+            indicators = tech_data.get("indicators", {}) or {}
+            raw_score = indicators.get("technical_score", 50)
+            tech_score = raw_score if isinstance(raw_score, (int, float)) else raw_score.get("score", 50)
             
             funda_score_obj = fund_data.get("score", {})
             funda_regime = funda_score_obj.get("grade", "NEUTRAL")
