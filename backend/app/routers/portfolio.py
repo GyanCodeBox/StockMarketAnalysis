@@ -56,41 +56,37 @@ async def get_portfolio_summary(input_data: PortfolioInput):
 
     async def analyze_single_stock(sym: str):
         try:
-            # We construct a mock request object to reuse existing logic
-            # In a real refactor, we'd extract the logic from routes into a pure service function
-            # checking cache first
-            
             summary_cache_key = f"portfolio_item:{sym}:{input_data.exchange}"
             cached = cache_manager.get(summary_cache_key)
             if cached:
                 return cached
 
-            # Create a request-like object if needed, or just call the logic
-            # Calling the existing route functions directly (they are async)
-            class MockRequest:
-                symbol = sym
-                exchange = input_data.exchange
-                timeframe = "day"
-                moving_averages = None
-                previous_bias = None
+            # Import the AnalyzeRequest from routes (need to move it to a shared place or just import here)
+            from app.routes import analyze_summary, AnalyzeRequest
             
-            req = MockRequest()
+            # Construct Request
+            req = AnalyzeRequest(
+                symbol=sym, 
+                exchange=input_data.exchange, 
+                timeframe="day",
+                mode="metrics_only"
+            )
             
-            # Parallel fetch of Technical & Fundamental
-            tech_task = analyze_technical(req)
-            fund_task = get_fundamental_financials(req)
+            # Call the optimized endpoint logic directly
+            # This returns { "structural_data": ..., "technical": ..., "fundamental": ... }
+            result_data = await analyze_summary(req)
             
-            tech_data, fund_data = await asyncio.gather(tech_task, fund_task, return_exceptions=True)
+            tech_data = result_data.get("technical", {})
+            fund_data = result_data.get("fundamental", {})
             
-            if isinstance(tech_data, Exception) or isinstance(fund_data, Exception):
-                # Return a partial error state object
-                return {
+            if not tech_data or not fund_data:
+                 return {
                     "symbol": sym, 
                     "error": True, 
-                    "attention": "Review" # Default to review on error
+                    "attention": "Review"
                 }
 
-            # Extract Metrics (Logic duplicated from optimize summary for now, should be shared)
+            # Extract Metrics
             tech_regime = tech_data.get("market_structure", {}).get("current_bias", "NEUTRAL")
             tech_conf = tech_data.get("market_structure", {}).get("confidence", "MEDIUM")
             tech_score = tech_data.get("indicators", {}).get("technical_score", {}).get("score", 50)
@@ -149,7 +145,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
                 "composite_score": composite,
                 "risk_level": risk_level_str,
                 "key_constraint": risk_constraints[0]['name'] if risk_constraints else None,
-                "stability_status": "Stable" if tech_stab.get("stability_score", 0) > 60 else "Unstable", # Simplified
+                "stability_status": "Stable" if tech_stab.get("stability_score", 0) > 60 else "Unstable",
                 "attention_flag": attention,
                 "details": {
                     "tech_regime": tech_regime,
