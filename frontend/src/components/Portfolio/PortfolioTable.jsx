@@ -57,7 +57,7 @@ const PortfolioTable = ({ stocks }) => {
                                     Composite Score
                                     <div className="relative group/tooltip">
                                         <Info className="w-3 h-3 text-slate-500 hover:text-indigo-400" />
-                                        <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-slate-900 border border-slate-700 text-slate-300 text-[10px] rounded shadow-xl hidden group-hover/tooltip:block z-50 normal-case font-normal leading-relaxed">
+                                        <div className="absolute top-full right-0 mt-2 w-64 p-3 bg-slate-900 border border-slate-700 text-slate-300 text-[10px] rounded shadow-xl hidden group-hover/tooltip:block z-50 normal-case font-normal leading-relaxed">
                                             Composite score reflects relative regime quality across the analyzed universe. Not a return expectation.
                                         </div>
                                     </div>
