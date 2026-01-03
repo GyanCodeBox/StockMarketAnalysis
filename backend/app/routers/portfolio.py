@@ -125,9 +125,10 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             confluence = ConfluenceService.get_confluence_state(tech_regime, funda_regime)
             
             tech_stab = RegimeStabilityService.calculate_stability_metrics(regime_hist, tech_regime)
-            composite = CompositeScoringService.calculate_composite_score(
+            composite_result = CompositeScoringService.calculate_composite_score(
                 tech_score, funda_score, tech_stab.get("stability_score", 50)
             )
+            composite_val = composite_result.get("value", 50)
             
             risk_constraints = RiskConstraintService.assess_risk_constraints(
                 latest_funda, {"regime": tech_regime, "confidence": tech_conf}
@@ -146,7 +147,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
                 attention = "CRITICAL"
             elif confluence['state'] in ["Structural Risk", "Drift Risk"]:
                 attention = "REVIEW"
-            elif composite < 50 or tech_stab.get("stability_score", 50) < 40: # Stability threshold example
+            elif composite_val < 50 or tech_stab.get("stability_score", 50) < 40: # Stability threshold example
                 attention = "MONITOR"
             else:
                 attention = "STABLE"
@@ -154,7 +155,7 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             result = {
                 "symbol": sym,
                 "confluence_state": confluence['state'],
-                "composite_score": composite,
+                "composite_score": composite_val,
                 "risk_level": risk_level_str,
                 "key_constraint": risk_constraints[0]['name'] if risk_constraints else None,
                 "stability_status": "Stable" if tech_stab.get("stability_score", 0) > 60 else "Unstable",
@@ -170,9 +171,6 @@ async def get_portfolio_summary(input_data: PortfolioInput):
             return result
 
         except Exception as e:
-            print(f"CRITICAL PORTFOLIO ERROR: {e}")
-            import traceback
-            traceback.print_exc()
             return {"symbol": sym, "error": str(e), "attention": "Critical"}
 
     # Run all analyses in parallel
