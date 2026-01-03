@@ -105,36 +105,47 @@ const CustomTooltip = ({ active, payload, label, suffix = '%' }) => {
 };
 
 const MiniTable = ({ columns, data, highlightCol = '' }) => {
-    if (!data) return null;
-    return (
-        <table className="w-full text-left border-collapse min-w-full">
-            <thead className="bg-slate-950/50 sticky top-0 z-10">
-                <tr>
-                    {columns.map((col, idx) => (
-                        <th key={idx} className={`px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 ${idx > 0 ? 'text-right' : 'sticky left-0 bg-slate-950'}`}>
-                            {col.label}
-                        </th>
-                    ))}
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/50">
-                {data.map((row, rIdx) => (
-                    <tr key={rIdx} className="hover:bg-indigo-500/5 transition-colors">
-                        {columns.map((col, cIdx) => {
-                            const val = row[col.key];
-                            const isHighlight = highlightCol === col.key;
-                            const colorClass = col.getColor ? col.getColor(val, row) : (isHighlight ? 'text-indigo-400 font-bold' : 'text-slate-400');
+    if (!data || data.length === 0) return null;
 
-                            return (
-                                <td key={cIdx} className={`px-3 py-2 text-xs font-medium border-slate-800/30 ${cIdx > 0 ? 'text-right' : 'sticky left-0 bg-slate-900/90 font-bold text-white'} ${colorClass}`}>
-                                    {col.format ? col.format(val, row) : val}
-                                </td>
-                            );
-                        })}
-                    </tr>
-                ))}
-            </tbody>
-        </table>
+    return (
+        <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+            {/* We add a min-width to ensure the table doesn't collapse too much */}
+            <table className="w-full text-left border-collapse min-w-max text-sm">
+                <tbody className="divide-y divide-slate-800/50">
+                    {columns.map((col, cIdx) => (
+                        <tr key={cIdx} className="hover:bg-indigo-500/5 transition-colors group">
+                            {/* Row Header (Metric Name) - Sticky Left */}
+                            <th className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-r border-slate-800/50 bg-slate-950 sticky left-0 z-20 w-32 shadow-[4px_0_12px_-4px_rgba(0,0,0,0.5)]">
+                                {col.label}
+                            </th>
+
+                            {/* Data Cells (Time Periods) */}
+                            {data.map((row, rIdx) => {
+                                const val = row[col.key];
+                                const isHighlight = highlightCol === col.key;
+
+                                // Apply custom color logic or default highlighting
+                                const colorClass = col.getColor
+                                    ? col.getColor(val, row)
+                                    : (isHighlight ? 'text-indigo-400 font-bold' : 'text-slate-400');
+
+                                // Special styling for the 'Quarter' row to stand out
+                                const isHeaderRow = cIdx === 0;
+                                const cellStyle = isHeaderRow
+                                    ? "font-bold text-indigo-300 bg-slate-900/40"
+                                    : colorClass;
+
+                                return (
+                                    <td key={rIdx} className={`px-4 py-2 border-r border-slate-800/30 whitespace-nowrap transition-colors ${cellStyle}`}>
+                                        {col.format ? col.format(val, row) : val}
+                                    </td>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
     );
 };
 

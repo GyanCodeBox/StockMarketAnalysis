@@ -284,6 +284,13 @@ class FundamentalTool:
         # 4. DATA SANITIZATION & LAYERING
         df = df.replace([np.inf, -np.inf], np.nan)
         df['date'] = df['date'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else None)
+        
+        # Create combined period label (Q4 2024, Q3 2024, etc.)
+        df['period_label'] = df.apply(
+            lambda row: f"{row.get('period', 'Q?')} {int(row.get('calendarYear', 0))}" if pd.notnull(row.get('calendarYear')) else row.get('period', 'Q?'),
+            axis=1
+        )
+        
         df_clean = df.astype(object).where(pd.notnull(df), None)
         
         # Reverse for UI (Latest first)
@@ -293,16 +300,17 @@ class FundamentalTool:
         return {
             "score": score_obj,
             "raw": {
-                "quarterly": df_ui[['date', 'period', 'calendarYear', 'revenue', 'eps', 'netIncome', 'otherIncome', 'operatingIncome']].to_dict(orient='records'),
+                "quarterly": df_ui[['date', 'period', 'period_label', 'calendarYear', 'revenue', 'eps', 'netIncome', 'otherIncome', 'operatingIncome']].to_dict(orient='records'),
                 "annual": [] # To be implemented in Phase 2
             },
             "derived": {
-                "yoy": df_ui[['date', 'sales_yoy_pct', 'eps_yoy_pct', 'net_income_yoy_pct', 'net_margin_pct', 'net_margin_yoy_delta', 'other_income_ratio', 'other_income_3y_avg']].to_dict(orient='records'),
-                "momentum": df_ui[['date', 'sales_rolling_2q_growth', 'eps_rolling_2q_growth']].to_dict(orient='records'),
-                "efficiency": df_ui[['date', 'roce']].to_dict(orient='records'),
+                "yoy": df_ui[['date', 'period_label', 'sales_yoy_pct', 'eps_yoy_pct', 'net_income_yoy_pct', 'net_margin_pct', 'net_margin_yoy_delta', 'other_income_ratio', 'other_income_3y_avg']].to_dict(orient='records'),
+                "momentum": df_ui[['date', 'period_label', 'sales_rolling_2q_growth', 'eps_rolling_2q_growth']].to_dict(orient='records'),
+                "efficiency": df_ui[['date', 'period_label', 'roce']].to_dict(orient='records'),
                 "structure": {
                     "latest_trends": {"sales": sales_trend, "eps": eps_trend},
-                    "historical": df_ui[['date', 'eps_rolling_4q', 'eps_prior_high']].to_dict(orient='records')
+                    "historical": df_ui[['date', 'period_label', 'eps_rolling_4q', 'eps_prior_high']].to_dict(orient='records')
                 }
             }
         }
+

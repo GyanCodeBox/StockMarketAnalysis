@@ -4,12 +4,14 @@ API routes for stock analysis
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+import logging
 from app.agent.graph import create_agent
 from app.services.cache import cache_manager
 from app.services.kite_service import KiteService
 from app.services.candle_explainer import CandleExplainer, CandleContext
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 kite_service = KiteService()
 
 
@@ -504,4 +506,165 @@ async def explain_candle(request: ExplainCandleRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
+
+# ============================================================================
+# PHASE 2: INSTITUTIONAL DECISION INTELLIGENCE
+# ============================================================================
+
+@router.post("/analysis/summary")
+async def get_decision_intelligence(request: AnalyzeRequest):
+    """
+    Phase 2: Unified Decision Intelligence Endpoint
+    
+    Provides:
+    - Tech-Fundamental Confluence State
+    - Composite Regime Score (0-100)
+    - Regime Stability Metrics
+    - Risk Constraint Analysis
+    
+    Answers: "Is price aligned with business reality? Where is risk asymmetric?"
+    """
+    from app.services.confluence_service import ConfluenceService
+    from app.services.composite_scoring_service import CompositeScoringService
+    from app.services.regime_stability_service import RegimeStabilityService
+    from app.services.risk_constraint_service import RiskConstraintService
+    import asyncio
+    from datetime import datetime
+    
+    try:
+        symbol = request.symbol.upper()
+        exchange = request.exchange or "NSE"
+        
+        # Fetch technical and fundamental data in parallel by calling existing endpoints
+        tech_data, funda_data = await asyncio.gather(
+            analyze_technical(request),
+            get_fundamental_financials(request)
+        )
+        
+        # Extract technical metrics
+        tech_regime = tech_data.get("market_structure", {}).get("current_bias", "NEUTRAL")
+        tech_confidence = tech_data.get("market_structure", {}).get("confidence", "MEDIUM")
+        tech_score = tech_data.get("indicators", {}).get("technical_score", {}).get("score", 50)
+        regime_history = tech_data.get("market_structure", {}).get("regime_history", [])
+        
+        # Extract fundamental metrics
+        funda_score_obj = funda_data.get("score", {})
+        funda_regime = funda_score_obj.get("grade", "NEUTRAL")  # STRONG/NEUTRAL/WEAK
+        funda_score = funda_score_obj.get("value", 50)
+        funda_phase = funda_score_obj.get("phase", "Maturity")
+        
+        # Get latest fundamental metrics for risk assessment
+        latest_funda = {}
+        if funda_data.get("raw", {}).get("quarterly"):
+            latest_derived = funda_data.get("derived", {}).get("yoy", [{}])[0]
+            latest_efficiency = funda_data.get("derived", {}).get("efficiency", [{}])[0]
+            
+            latest_funda = {
+                "other_income_ratio": latest_derived.get("other_income_ratio", 0),
+                "roce": latest_efficiency.get("roce", 0),
+                "net_margin_pct": latest_derived.get("net_margin_pct", 0),
+                "net_margin_yoy_delta": latest_derived.get("net_margin_yoy_delta", 0)
+            }
+        
+        # ===== PHASE 2 SERVICES =====
+        
+        # 1. Confluence Analysis
+        confluence = ConfluenceService.get_confluence_state(
+            tech_regime,
+            funda_regime
+        )
+        
+        # 2. Regime Stability
+        tech_stability = RegimeStabilityService.calculate_stability_metrics(
+            regime_history,
+            tech_regime,
+            request.timeframe or "day"
+        )
+        
+        # For fundamental stability, we need quarterly history
+        funda_quarterly = funda_data.get("raw", {}).get("quarterly", [])
+        funda_history = []
+        for q in funda_quarterly:
+            funda_history.append({
+                "phase": funda_phase,  # Simplified - in production, track phase per quarter
+                "score": funda_score
+            })
+        
+        funda_stability = RegimeStabilityService.calculate_fundamental_stability(
+            funda_history
+        )
+        
+        # 3. Composite Score
+        composite = CompositeScoringService.calculate_composite_score(
+            tech_score,
+            funda_score,
+            tech_stability.get("stability_score", 50)
+        )
+        
+        # 4. Risk Constraints
+        risk_constraints = RiskConstraintService.assess_risk_constraints(
+            latest_funda,
+            {
+                "regime": tech_regime,
+                "confidence": tech_confidence
+            }
+        )
+        
+        risk_summary = RiskConstraintService.get_risk_summary(risk_constraints)
+        
+        # ===== RESPONSE =====
+        
+        return {
+            "symbol": symbol,
+            "exchange": exchange,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            
+            "technical_state": {
+                "regime": tech_regime,
+                "confidence": tech_confidence,
+                "duration_bars": tech_stability.get("current_duration", 0),
+                "duration_formatted": tech_stability.get("duration_formatted", "0 bars"),
+                "score": tech_score
+            },
+            
+            "fundamental_state": {
+                "regime": funda_regime,
+                "phase": funda_phase,
+                "duration_quarters": funda_stability.get("duration_quarters", 0),
+                "score": funda_score,
+                "diagnostic": funda_score_obj.get("diagnostic", "")
+            },
+            
+            "confluence": confluence,
+            
+            "composite_score": composite,
+            
+            "stability_metrics": {
+                "technical": {
+                    "duration": tech_stability.get("current_duration", 0),
+                    "volatility": tech_stability.get("regime_volatility", 0),
+                    "persistence_rate": tech_stability.get("persistence_rate", 0),
+                    "score": tech_stability.get("stability_score", 0)
+                },
+                "fundamental": {
+                    "duration_quarters": funda_stability.get("duration_quarters", 0),
+                    "phase_changes": funda_stability.get("phase_changes", 0),
+                    "score": funda_stability.get("stability_score", 0)
+                }
+            },
+            
+            "risk_constraints": risk_constraints,
+            "risk_summary": risk_summary
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Decision intelligence error: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Decision intelligence error: {str(e)}"
+        )
 

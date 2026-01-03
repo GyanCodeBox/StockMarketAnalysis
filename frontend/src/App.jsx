@@ -4,6 +4,7 @@ import StockInfo from './components/StockInfo'
 import StockChart from './components/StockChart'
 import AIAnalysisDisplay from './components/AIAnalysisDisplay'
 import FundamentalAnalysis from './components/FundamentalAnalysis'
+import DecisionIntelligence from './components/DecisionIntelligence'
 import LoadingAnimation from './components/LoadingAnimation'
 import TechnicalScoreCard from './components/TechnicalScoreCard'
 import LazyAccordionSection from './components/LazyAccordionSection'
@@ -154,28 +155,37 @@ function App() {
               <div className="flex space-x-4 mb-6">
                 <button
                   onClick={() => setActiveTab('technical')}
-                  className={`px - 4 py - 2 rounded - lg font - medium transition - all ${activeTab === 'technical'
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'technical'
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    } `}
+                    }`}
                 >
                   Technical Analysis
                 </button>
                 <button
                   onClick={() => setActiveTab('fundamental')}
-                  className={`px - 4 py - 2 rounded - lg font - medium transition - all ${activeTab === 'fundamental'
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'fundamental'
                     ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    } `}
+                    }`}
                 >
                   Fundamental Analysis
+                </button>
+                <button
+                  onClick={() => setActiveTab('decision')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${activeTab === 'decision'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    }`}
+                >
+                  Decision Intelligence
                 </button>
               </div>
             )}
 
             {/* Content Views */}
             {activeTab === 'technical' ? (
-              <div id="technical-section" className={`space - y - 6 ${isChartMaximized ? "" : "animate-fade-in"} `}>
+              <div id="technical-section" className={`space-y-6 ${isChartMaximized ? "" : "animate-fade-in"}`}>
                 {/* Market Structure Banner (Source of Truth) */}
                 {techData.market_structure && (
                   <MarketStructureBanner
@@ -223,7 +233,7 @@ function App() {
                   </LazyAccordionSection>
                 </div>
               </div>
-            ) : (
+            ) : activeTab === 'fundamental' ? (
               <div className="space-y-6 animate-fade-in-up">
                 <FundamentalAnalysis symbol={symbol} exchange={exchange} />
 
@@ -239,6 +249,10 @@ function App() {
                     {(data) => <AIAnalysisDisplay analysis={data.analysis} />}
                   </LazyAccordionSection>
                 </div>
+              </div>
+            ) : (
+              <div className="space-y-6 animate-fade-in-up">
+                <DecisionIntelligence symbol={symbol} exchange={exchange} />
               </div>
             )}
           </div>

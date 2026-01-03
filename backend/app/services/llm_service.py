@@ -110,7 +110,7 @@ class LLMService:
 Fundamental Analysis:
 - EPS 5-Year CAGR: {cagr.get('eps_5y', 'N/A')}%
 - Sales 5-Year CAGR: {cagr.get('sales_5y', 'N/A')}%
-- Latest Annual EPS Growth: {latest_year.get('eps_growth', 'N/A'):.2f}%
+- Latest Annual EPS Growth: {latest_year.get('eps_growth', 'N/A') if isinstance(latest_year.get('eps_growth'), (int, float)) else latest_year.get('eps_growth', 'N/A')}%
 - Shareholding: Promoter {fundamental_data.get('ownership', [{}])[0].get('percentHeld', 'N/A')}% (approx)
 """
 

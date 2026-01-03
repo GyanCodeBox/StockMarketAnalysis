@@ -26,6 +26,9 @@ app.add_middleware(
 app.include_router(router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 
+from app.routers.portfolio import router as portfolio_router
+app.include_router(portfolio_router, prefix="/api/portfolio")
+
 
 @app.get("/")
 async def root():
