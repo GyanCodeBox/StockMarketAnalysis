@@ -31,7 +31,7 @@ function Terminal() {
         if (urlSymbol && urlSymbol !== symbol && !loading) {
             handleAnalyze(urlSymbol, 'NSE');
         }
-    }, [urlSymbol]);
+    }, [urlSymbol, handleAnalyze]);
 
     // Handle Escape key to exit fullscreen
     useEffect(() => {
@@ -44,7 +44,7 @@ function Terminal() {
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [isChartMaximized])
 
-    const handleAnalyze = async (symbolValue, exchangeValue, timeframe = 'day') => {
+    const handleAnalyze = useCallback(async (symbolValue, exchangeValue, timeframe = 'day') => {
         const isJustTimeframe = symbolValue === symbol && exchangeValue === exchange && techData;
 
         setLoading(true)
@@ -110,7 +110,14 @@ function Terminal() {
         Promise.all([fetchTech()]).finally(() => {
             setLoading(false);
         });
-    }
+    }, [symbol, exchange, techData]);
+
+    // Auto-trigger analysis if URL param exists
+    useEffect(() => {
+        if (urlSymbol && urlSymbol !== symbol && !loading) {
+            handleAnalyze(urlSymbol, 'NSE');
+        }
+    }, [urlSymbol, handleAnalyze]); // Added handleAnalyze, removed loading check from deps to avoid stale closure issues, handled inside if
 
     return (
         <div id="terminal-top" className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-200">

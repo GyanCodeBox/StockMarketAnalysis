@@ -341,7 +341,11 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
       })
     });
 
-    setZoneOverlays(overlays)
+    // Deep compare to prevent oscillation/infinite loops
+    setZoneOverlays(prev => {
+      const isSame = JSON.stringify(prev) === JSON.stringify(overlays)
+      return isSame ? prev : overlays
+    })
   }, [accumulationZones, distributionZones, showZones])
 
   useEffect(() => {
@@ -398,7 +402,11 @@ function StockChart({ symbol, quote, ohlcData, indicators, accumulationZones = [
         event: fb,
       })
     })
-    setFailedMarkers(markers)
+    // Deep compare
+    setFailedMarkers(prev => {
+      const isSame = JSON.stringify(prev) === JSON.stringify(markers)
+      return isSame ? prev : markers
+    })
   }, [failedBreakouts, showFailedBreakouts, ohlcData?.interval])
 
   useEffect(() => {
