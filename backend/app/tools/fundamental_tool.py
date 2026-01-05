@@ -217,7 +217,7 @@ class FundamentalTool:
 
             # Final Weighted Sum
             total_value = (growth_bucket * 0.25 + structure_bucket * 0.15 + quality_bucket * 0.20 + profit_bucket * 0.20 + efficiency_bucket * 0.20) / 100
-            score_obj["value"] = round(total_value)
+            score_obj["value"] = round(float(total_value)) if not np.isnan(total_value) else 0
             
             if total_value >= 70: score_obj["grade"] = "Strong"
             elif total_value >= 40: score_obj["grade"] = "Neutral"
@@ -243,12 +243,17 @@ class FundamentalTool:
             }
 
             # LEGACY CONTRIBUTORS (Scores for sorting/ranking)
+            def format_contributor(bucket, scale=5):
+                if np.isnan(bucket): return "0"
+                val = round((bucket - 50) / scale)
+                return f"{'+' if val > 0 else ''}{val}"
+
             score_obj["contributors"] = {
-                "growth": f"{'+' if growth_bucket > 50 else ''}{round((growth_bucket-50)/5)}",
-                "structure": f"{'+' if structure_bucket > 50 else ''}{round((structure_bucket-50)/6)}",
-                "quality": f"{'+' if quality_bucket > 50 else ''}{round((quality_bucket-50)/5)}",
-                "profitability": f"{'+' if profit_bucket > 50 else ''}{round((profit_bucket-50)/5)}",
-                "efficiency": f"{'+' if efficiency_bucket > 50 else ''}{round((efficiency_bucket-50)/5)}"
+                "growth": format_contributor(growth_bucket, 5),
+                "structure": format_contributor(structure_bucket, 6),
+                "quality": format_contributor(quality_bucket, 5),
+                "profitability": format_contributor(profit_bucket, 5),
+                "efficiency": format_contributor(efficiency_bucket, 5)
             }
 
             # DIAGNOSTIC SENTENCE GENERATION

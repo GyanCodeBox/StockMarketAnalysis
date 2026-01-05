@@ -43,6 +43,8 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+frontend/playwright-report/
+frontend/test-results/
 
 # Jupyter
 .ipynb_checkpoints

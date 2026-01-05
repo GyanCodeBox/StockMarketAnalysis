@@ -35,5 +35,24 @@ The portfolio grid provides a high-level monitoring layer:
 - **Stability History**: A timeline at the bottom of the chart showing the history of technical regimes.
 - **Explain Candle**: Right-click any candle to get an AI-powered institutional interpretation of the price action.
 
+## 6. How to Run Tests
+The project maintains a 4-layer testing architecture (L1-L4):
+
+### Backend Tests (L1/L2)
+1. Navigate to the `backend/` directory.
+2. Activate your virtual environment: `source venv/bin/activate`.
+3. Run all backend tests: `pytest`.
+4. Run specific module tests: `pytest app/services/tests/test_technical.py`.
+
+### Frontend E2E Tests (L3)
+1. Ensure the **Backend** is running: `uvicorn app.main:app --reload`.
+2. Navigate to the `frontend/` directory.
+3. Run all Playwright tests: `npx playwright test`.
+4. Run tests with UI: `npx playwright test --ui`.
+
+### Automated Pipeline (L4)
+- Tests are automatically executed via GitHub Actions on every push to `main`.
+- See `.github/workflows/` for configuration.
+
 ---
 *Disclaimer: Portfolio View is a monitoring and prioritization layer. It does not generate signals or recommendations.*

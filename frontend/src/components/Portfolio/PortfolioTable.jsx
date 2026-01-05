@@ -89,9 +89,9 @@ const PortfolioTable = ({ stocks }) => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <span className="text-sm text-slate-300">{formatDisplay(stock.confluence_state)}</span>
-                                    {stock.details?.confluence_fmt && (
+                                    {stock.confluence_fmt && (
                                         <div className="text-[10px] text-slate-500 mt-0.5 font-medium lowercase">
-                                            {stock.details.confluence_fmt.toLowerCase().replace(' + ', ' · ')}
+                                            {stock.confluence_fmt.toLowerCase().replace(' + ', ' · ')}
                                         </div>
                                     )}
                                 </td>
@@ -107,10 +107,10 @@ const PortfolioTable = ({ stocks }) => {
                                 <td className="px-6 py-4">
                                     <div
                                         className="flex items-center gap-2"
-                                        title={stock.stability_status === 'Stable' ? "Stable: Regime persistence above historical median" : "Unstable: Recent regime transitions (high change frequency)"}
+                                        title={stock.stability === 'Stable' ? "Stable: Regime persistence above historical median" : "Unstable: Recent regime transitions (high change frequency)"}
                                     >
-                                        <div className={`w-1.5 h-1.5 rounded-full ${stock.stability_status === 'Stable' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
-                                        <span className="text-xs text-slate-300">{stock.stability_status}</span>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${stock.stability === 'Stable' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
+                                        <span className="text-xs text-slate-300">{stock.stability}</span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-center">
