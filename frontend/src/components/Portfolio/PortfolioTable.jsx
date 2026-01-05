@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowUpDown, AlertTriangle, CheckCircle2, AlertOctagon, Info } from 'lucide-react';
+import { ArrowUpDown, AlertTriangle, CheckCircle2, AlertOctagon, Info, BrainCircuit } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import DecisionBrief from '../DecisionBrief';
 
 const ATTENTION_COLORS = {
     'CRITICAL': 'text-red-400 bg-red-500/10 border-red-500/20',
@@ -36,9 +37,17 @@ const formatDisplay = (val) => DISPLAY_MAPPINGS[val] || val;
 const PortfolioTable = ({ stocks }) => {
     const navigate = useNavigate();
     const [sortConfig, setSortConfig] = useState({ key: 'attention_flag', direction: 'asc' });
+    const [expandedBrief, setExpandedBrief] = useState(null); // symbol of expanded row
 
-    const handleRowClick = (symbol) => {
+    const handleRowClick = (symbol, e) => {
+        // Prevent row navigation if clicking the brief toggle
+        if (e.target.closest('.brief-toggle')) return;
         navigate(`/analyze/${symbol}`);
+    };
+
+    const toggleBrief = (symbol, e) => {
+        e.stopPropagation();
+        setExpandedBrief(expandedBrief === symbol ? null : symbol);
     };
 
     if (!stocks || stocks.length === 0) return null;
@@ -52,6 +61,9 @@ const PortfolioTable = ({ stocks }) => {
                         <tr>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:text-white transition-colors">
                                 Symbol
+                            </th>
+                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-center">
+                                Brief
                             </th>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:text-white transition-colors">
                                 Confluence State
@@ -83,46 +95,65 @@ const PortfolioTable = ({ stocks }) => {
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                         {stocks.map((stock) => (
-                            <tr
-                                key={stock.symbol}
-                                onClick={() => handleRowClick(stock.symbol)}
-                                className="group hover:bg-indigo-500/5 transition-colors cursor-pointer border-l-2 border-l-transparent hover:border-l-indigo-500"
-                            >
-                                <td className="px-6 py-4">
-                                    <div className="font-bold text-white group-hover:text-indigo-300 transition-colors">{stock.symbol}</div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className="text-sm text-slate-300">{formatDisplay(stock.confluence_state)}</span>
-                                    {stock.confluence_fmt && (
-                                        <div className="text-[10px] text-slate-500 mt-0.5 font-medium lowercase">
-                                            {stock.confluence_fmt.toLowerCase().replace(' + ', ' · ')}
+                            <React.Fragment key={stock.symbol}>
+                                <tr
+                                    onClick={(e) => handleRowClick(stock.symbol, e)}
+                                    className="group hover:bg-indigo-500/5 transition-colors cursor-pointer border-l-2 border-l-transparent hover:border-l-indigo-500"
+                                >
+                                    <td className="px-6 py-4">
+                                        <div className="font-bold text-white group-hover:text-indigo-300 transition-colors">{stock.symbol}</div>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <button
+                                            onClick={(e) => toggleBrief(stock.symbol, e)}
+                                            className={`brief-toggle p-2 rounded-lg transition-all ${expandedBrief === stock.symbol ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-indigo-400 hover:bg-white/5'}`}
+                                            title="View AI Decision Brief"
+                                        >
+                                            <BrainCircuit size={16} />
+                                        </button>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className="text-sm text-slate-300">{formatDisplay(stock.confluence_state)}</span>
+                                        {stock.confluence_fmt && (
+                                            <div className="text-[10px] text-slate-500 mt-0.5 font-medium lowercase">
+                                                {stock.confluence_fmt.toLowerCase().replace(' + ', ' · ')}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right font-mono text-slate-300">
+                                        {stock.composite_score.toFixed(0)}
+                                    </td>
+                                    <td className={`px-6 py-4 text-center text-xs ${RISK_COLORS[stock.risk_level] || 'text-slate-400'}`}>
+                                        {formatDisplay(stock.risk_level)}
+                                    </td>
+                                    <td className="px-6 py-4 text-xs text-slate-400 max-w-[200px] truncate" title={stock.key_constraint}>
+                                        {stock.key_constraint || <span className="text-slate-600 italic">None</span>}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div
+                                            className="flex items-center gap-2"
+                                            title={stock.stability === 'Stable' ? "Stable: Regime persistence above historical median" : "Unstable: Recent regime transitions (high change frequency)"}
+                                        >
+                                            <div className={`w-1.5 h-1.5 rounded-full ${stock.stability === 'Stable' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
+                                            <span className="text-xs text-slate-300">{stock.stability}</span>
                                         </div>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 text-right font-mono text-slate-300">
-                                    {stock.composite_score.toFixed(0)}
-                                </td>
-                                <td className={`px-6 py-4 text-center text-xs ${RISK_COLORS[stock.risk_level] || 'text-slate-400'}`}>
-                                    {formatDisplay(stock.risk_level)}
-                                </td>
-                                <td className="px-6 py-4 text-xs text-slate-400 max-w-[200px] truncate" title={stock.key_constraint}>
-                                    {stock.key_constraint || <span className="text-slate-600 italic">None</span>}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div
-                                        className="flex items-center gap-2"
-                                        title={stock.stability === 'Stable' ? "Stable: Regime persistence above historical median" : "Unstable: Recent regime transitions (high change frequency)"}
-                                    >
-                                        <div className={`w-1.5 h-1.5 rounded-full ${stock.stability === 'Stable' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500'}`} />
-                                        <span className="text-xs text-slate-300">{stock.stability}</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-center">
-                                    <span className={`px-2.5 py-1 rounded text-[10px] font-bold border ${ATTENTION_COLORS[stock.attention_flag] || 'text-slate-400 border-slate-800'}`}>
-                                        {formatDisplay(stock.attention_flag)}
-                                    </span>
-                                </td>
-                            </tr>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className={`px-2.5 py-1 rounded text-[10px] font-bold border ${ATTENTION_COLORS[stock.attention_flag] || 'text-slate-400 border-slate-800'}`}>
+                                            {formatDisplay(stock.attention_flag)}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {expandedBrief === stock.symbol && (
+                                    <tr className="bg-slate-950/40">
+                                        <td colSpan="8" className="px-6 py-4 border-l-2 border-l-indigo-600">
+                                            <div className="max-w-3xl">
+                                                <DecisionBrief brief={stock.analysis} />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>

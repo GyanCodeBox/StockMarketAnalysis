@@ -260,7 +260,7 @@ function Terminal() {
                                         icon="🚀"
                                         description="Deep multi-agent research and technical synthesis"
                                         endpoint="/api/analyze/summary"
-                                        requestParams={{ symbol, exchange, timeframe: 'day' }}
+                                        requestParams={{ symbol, exchange, timeframe: 'day', mode: 'technical_brief' }}
                                     >
                                         {(data) => <AIAnalysisDisplay analysis={data.analysis} />}
                                     </LazyAccordionSection>
@@ -277,7 +277,7 @@ function Terminal() {
                                         icon="🚀"
                                         description="Deep multi-agent research and technical synthesis"
                                         endpoint="/api/analyze/summary"
-                                        requestParams={{ symbol, exchange, timeframe: 'day' }}
+                                        requestParams={{ symbol, exchange, timeframe: 'day', mode: 'fundamental_brief' }}
                                     >
                                         {(data) => <AIAnalysisDisplay analysis={data.analysis} />}
                                     </LazyAccordionSection>

@@ -207,7 +207,8 @@ async def generate_analysis_node(state: AgentState) -> AgentState:
             symbol,
             quote,
             indicators,
-            fundamental_data
+            fundamental_data,
+            mode="decision_brief"
         )
         
         state["analysis"] = analysis

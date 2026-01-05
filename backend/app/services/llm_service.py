@@ -3,8 +3,10 @@ LLM service for generating stock analysis
 """
 import os
 import logging
+import json
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
+from app.utils.llm_schema_validator import validate_decision_brief
 
 load_dotenv()
 
@@ -69,10 +71,50 @@ class LLMService:
         if mode == "metrics_only":
             return ""
 
-        # Prepare prompt
+        # Try OpenAI first, then Anthropic, then mock
+        brief_modes = ["decision_brief", "technical_brief", "fundamental_brief"]
+        if mode in brief_modes:
+            if mode == "technical_brief":
+                prompt = self._build_technical_brief_prompt(symbol, quote, indicators)
+            elif mode == "fundamental_brief":
+                prompt = self._build_fundamental_brief_prompt(symbol, quote, fundamental_data)
+            else:
+                prompt = self._build_decision_brief_prompt(symbol, quote, indicators, fundamental_data)
+            
+            for attempt in range(3):  # Original + 2 retries
+                try:
+                    raw_response = ""
+                    if self.openai_client:
+                        raw_response = await self._generate_with_openai(prompt, is_json=True)
+                    elif self.anthropic_client:
+                        raw_response = await self._generate_with_anthropic(prompt)
+                    else:
+                        return self._generate_mock_analysis(symbol, quote, indicators, fundamental_data, mode=mode)
+                    
+                    # Extract JSON (in case LLM included text around it)
+                    json_str = raw_response
+                    if "{" in raw_response:
+                        json_str = raw_response[raw_response.find("{"):raw_response.rfind("}")+1]
+                    
+                    data = json.loads(json_str)
+                    validated_data = validate_decision_brief(data)
+                    return json.dumps(validated_data)
+                except Exception as e:
+                    logger.warning(f"{mode} attempt {attempt + 1} failed: {e}")
+                    if attempt == 2:
+                        logger.error(f"Critical: {mode} synthesis failed after 3 attempts. Last error: {e}")
+                        return json.dumps({
+                            "headline": f"Institutional {mode.replace('_', ' ').title()} Unavailable",
+                            "primary_observation": "Intelligence compression engine encountered a structural validation error.",
+                            "dominant_risk": f"Data constraint violation: {str(e).split(':')[-1].strip()}",
+                            "monitoring_points": ["System logs for service health", "Direct metric panels for raw data"],
+                            "confidence_note": "Technical error in synthesis layer. Refer to quantitative indices."
+                        })
+            return ""
+
+        # Prepare prompt for full mode
         prompt = self._build_analysis_prompt(symbol, quote, indicators, fundamental_data)
         
-        # Try OpenAI first, then Anthropic, then mock
         if self.openai_client:
             try:
                 return await self._generate_with_openai(prompt)
@@ -145,19 +187,139 @@ Please provide:
 Keep the analysis concise (3-4 paragraphs), use plain language, and format with Markdown headers."""
         
         return prompt
+
+    def _build_technical_brief_prompt(
+        self,
+        symbol: str,
+        quote: Dict[str, Any],
+        indicators: Dict[str, Any]
+    ) -> str:
+        """Build a strict schema-based prompt for technical intelligence."""
+        ms = indicators.get('market_structure', {})
+        tech_score_obj = indicators.get('technical_score', {})
+        tech_score = tech_score_obj.get('score', 'N/A')
+        trend = indicators.get('price_trend', 'N/A')
+        
+        prompt = f"""You are a professional technical analyst. Summarize the following technical data into a strictly structured JSON brief.
+        
+STOCK: {symbol}
+PRICE: ₹{quote.get('last_price', 'N/A')} ({quote.get('change_percent', 0):.2f}%)
+TECH SCORE: {tech_score}/100 | TREND: {trend} | BIAS: {ms.get('bias', 'N/A')}
+INDICATORS: { {k: v for k,v in indicators.items() if isinstance(v, (int, float, str)) and k != 'ohlc_data'} }
+
+RULES:
+1. FOCUS ONLY ON TECHNICALS (Price, Vol, Trend, Structures).
+2. OUTPUT ONLY VALID JSON. NO MARKDOWN.
+3. NO DISALLOWED LANGUAGE: 'buy', 'sell', 'predict', 'target', 'upside', 'downside', 'will', 'expected to', 'recommend'.
+4. Schema:
+{{
+  "headline": "<1-line technical summary>",
+  "primary_observation": "<The single most important technical alignment or misalignment>",
+  "dominant_risk": "<The top technical risk identified (e.g., failed breakout, divergence)>",
+  "monitoring_points": ["<Transition 1>", "<Transition 2>"],
+  "confidence_note": "Non-predictive assessment based on price structure alignment"
+}}
+
+Note: Ensure EXACTLY 2 or 3 monitoring points.
+"""
+        return prompt
+
+    def _build_fundamental_brief_prompt(
+        self,
+        symbol: str,
+        quote: Dict[str, Any],
+        fundamental_data: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Build a strict schema-based prompt for fundamental intelligence."""
+        fund_regime = "NEUTRAL"
+        fund_score = "N/A"
+        f_details = "No fundamental data"
+        if fundamental_data:
+            fund_score_obj = fundamental_data.get("score", {})
+            fund_regime = fund_score_obj.get("grade", "NEUTRAL")
+            fund_score = fund_score_obj.get("value", "N/A")
+            f_details = str(fundamental_data.get("financials", {}).get("cagr", {}))
+
+        prompt = f"""You are a professional fundamental researcher. Summarize the following fundamental data into a strictly structured JSON brief.
+        
+STOCK: {symbol}
+FUND GRADE: {fund_regime} | FUND SCORE: {fund_score}/100
+KPIs: {f_details}
+
+RULES:
+1. FOCUS ONLY ON FUNDAMENTALS (Quality, Growth, Efficiency).
+2. OUTPUT ONLY VALID JSON. NO MARKDOWN.
+3. NO DISALLOWED LANGUAGE: 'buy', 'sell', 'predict', 'target', 'upside', 'downside', 'recommend'.
+4. Schema:
+{{
+  "headline": "<1-line fundamental summary>",
+  "primary_observation": "<The single most important fundamental insight>",
+  "dominant_risk": "<The top business/financial risk constraint identifier (e.g., debt, efficiency decay)>",
+  "monitoring_points": ["<Financial KPI 1>", "<Financial KPI 2>"],
+  "confidence_note": "Non-predictive assessment based on current business metrics"
+}}
+
+Note: Ensure EXACTLY 2 or 3 monitoring points.
+"""
+        return prompt
+
+    def _build_decision_brief_prompt(
+        self,
+        symbol: str,
+        quote: Dict[str, Any],
+        indicators: Dict[str, Any],
+        fundamental_data: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Build a strict schema-based prompt for institutional decision briefs (Combined)."""
+        ms = indicators.get('technical_score', {})
+        tech_score = ms.get('score', 'N/A')
+        trend = indicators.get('price_trend', 'N/A')
+        
+        fund_regime = "NEUTRAL"
+        fund_score = "N/A"
+        if fundamental_data:
+            fund_score_obj = fundamental_data.get("score", {})
+            fund_regime = fund_score_obj.get("grade", "NEUTRAL")
+            fund_score = fund_score_obj.get("value", "N/A")
+
+        prompt = f"""You are a professional institutional senior analyst. Summarize technical and fundamental confluence into a strictly structured JSON brief.
+        
+STOCK: {symbol}
+TECH SCORE: {tech_score}/100 | TREND: {trend}
+FUND GRADE: {fund_regime} | FUND SCORE: {fund_score}/100
+
+RULES:
+1. SYNTHESIZE BOTH SIDES.
+2. OUTPUT ONLY VALID JSON. NO MARKDOWN.
+3. NO DISALLOWED LANGUAGE: 'buy', 'sell', 'predict', 'target', 'upside', 'downside', 'recommend'.
+4. Schema:
+{{
+  "headline": "<1-line institutional confluence summary>",
+  "primary_observation": "<The single most important tech-fundamental alignment>",
+  "dominant_risk": "<The top unified risk constraint>",
+  "monitoring_points": ["<Transition 1>", "<Transition 2>"],
+  "confidence_note": "Non-predictive assessment based on regime alignment"
+}}
+
+Note: Ensure EXACTLY 2 or 3 monitoring points.
+"""
+        return prompt
     
-    async def _generate_with_openai(self, prompt: str) -> str:
+    async def _generate_with_openai(self, prompt: str, is_json: bool = False) -> str:
         """Generate analysis using OpenAI"""
-        response = await self.openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
+        kwargs = {
+            "model": "gpt-4o-mini",
+            "messages": [
                 {"role": "system", "content": "You are a professional stock market analyst. Provide clear, concise technical and fundamental analysis."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
-            max_tokens=500
-        )
-        
+            "temperature": 0.3 if is_json else 0.7,
+            "max_tokens": 500
+        }
+        if is_json:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        response = await self.openai_client.chat.completions.create(**kwargs)
         return response.choices[0].message.content.strip()
     
     async def _generate_with_anthropic(self, prompt: str) -> str:
@@ -178,9 +340,35 @@ Keep the analysis concise (3-4 paragraphs), use plain language, and format with 
         symbol: str,
         quote: Dict[str, Any],
         indicators: Dict[str, Any],
-        fundamental_data: Optional[Dict[str, Any]] = None
+        fundamental_data: Optional[Dict[str, Any]] = None,
+        mode: str = "full"
     ) -> str:
         """Generate mock analysis for testing when LLM APIs are not available"""
+        if mode == "decision_brief":
+            return json.dumps({
+                "headline": f"Institutional Confluence Brief for {symbol}",
+                "primary_observation": "Price structure remains in technical alignment with business quality metrics.",
+                "dominant_risk": "Regime volatility exceeds historical structural norms.",
+                "monitoring_points": ["Price persistence above key moving averages", "Quarterly efficiency consistency"],
+                "confidence_note": "Non-predictive assessment based on current regime alignment."
+            })
+        elif mode == "technical_brief":
+            return json.dumps({
+                "headline": f"Technical Intelligence: {symbol}",
+                "primary_observation": f"Regime bias remains {indicators.get('price_trend', 'neutral')} with stable momentum.",
+                "dominant_risk": "Mean reversion from overextended oscillators.",
+                "monitoring_points": [f"Support at ₹{indicators.get('support_levels', [0])[0]}", "Resistance at key structural high"],
+                "confidence_note": "Non-predictive technical assessment."
+            })
+        elif mode == "fundamental_brief":
+            return json.dumps({
+                "headline": f"Fundamental Health Brief: {symbol}",
+                "primary_observation": "Capital efficiency remains above historical median.",
+                "dominant_risk": "Potential margin compression from rising op-ex.",
+                "monitoring_points": ["Upcoming quarterly earnings growth", "Debt-to-equity stability"],
+                "confidence_note": "Non-predictive fundamental assessment."
+            })
+
         current_price = quote.get("last_price", 0)
         sma_20 = indicators.get("sma_20", current_price)
         trend = indicators.get("price_trend", "neutral")

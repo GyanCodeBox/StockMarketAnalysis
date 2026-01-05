@@ -26,6 +26,7 @@ class PortfolioStock(BaseModel):
     key_constraint: Optional[str] = None
     attention_flag: str
     stability: str
+    analysis: Optional[str] = None
 
 class PortfolioSummary(BaseModel):
     total_stocks: int
@@ -52,7 +53,7 @@ async def analyze_single_stock(sym: str, exchange: str = "NSE"):
             symbol=sym, 
             exchange=exchange, 
             timeframe="day",
-            mode="metrics_only"
+            mode="decision_brief"
         )
         
         # Call the optimized endpoint logic directly
@@ -137,7 +138,8 @@ async def analyze_single_stock(sym: str, exchange: str = "NSE"):
             risk_level=risk_summary.get("overall_risk", "LOW"),
             key_constraint=key_constraint,
             attention_flag=attention,
-            stability=stability_status
+            stability=stability_status,
+            analysis=result_data.get("analysis")
         )
         
         # Cache for 15 minutes

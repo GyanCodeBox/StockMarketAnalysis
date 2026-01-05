@@ -4,6 +4,7 @@ import ConfluenceBanner from './ConfluenceBanner';
 import CompositeScoreIndicator from './CompositeScoreIndicator';
 import RiskConstraintPanel from './RiskConstraintPanel';
 import { Brain, TrendingUp, Activity } from 'lucide-react';
+import DecisionBrief from './DecisionBrief';
 
 const DecisionIntelligence = ({ symbol, exchange }) => {
     const requestParams = { symbol, exchange };
@@ -48,7 +49,10 @@ const DecisionIntelligence = ({ symbol, exchange }) => {
 
                     return (
                         <div className="space-y-8">
-                            {/* 1. Confluence Banner (Primary) */}
+                            {/* 1. AI Decision Brief (Synthesized Intelligence) */}
+                            {data.analysis && <DecisionBrief brief={data.analysis} />}
+
+                            {/* 2. Confluence Banner (Primary) */}
                             <ConfluenceBanner confluenceData={data.confluence} />
 
                             {/* 2. Metrics Grid */}

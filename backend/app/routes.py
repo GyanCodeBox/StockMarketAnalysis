@@ -316,11 +316,22 @@ async def analyze_summary(request: AnalyzeRequest):
         exchange = request.exchange or "NSE"
         timeframe = request.timeframe or "day"
         
-        # 1. Check final summary cache
-        summary_cache_key = f"summary:{symbol}:{exchange}:{timeframe}"
+        # 1. Resolve mode: If full, use decision_brief (institutional upgrade)
+        target_mode = request.mode
+        if target_mode == "full":
+            target_mode = "decision_brief"
+            
+        # 2. Check final summary cache (Include mode in key)
+        summary_cache_key = f"summary:{symbol}:{exchange}:{timeframe}:{target_mode}"
         cached_summary = cache_manager.get(summary_cache_key)
         if cached_summary:
-            return {"analysis": cached_summary}
+            if target_mode in ["metrics_only", "decision_brief", "technical_brief", "fundamental_brief"]:
+                 # We need the full data for these modes, so we can't shortcut if only analysis is cached
+                 # or we need to cache the whole response object. For now, let's just skip cache shortcut 
+                 # if structural data is required and components aren't in cache.
+                 pass
+            else:
+                return {"analysis": cached_summary}
             
         # 2. Try to get components from cache
         tech_cache_key = f"technical:{symbol}:{exchange}:{timeframe}"
@@ -396,21 +407,22 @@ async def analyze_summary(request: AnalyzeRequest):
             
         # 4. Generate Analysis
         from app.agent.nodes import llm_service # Use the global one
+        
         analysis = await llm_service.generate_analysis(
             symbol=symbol,
             quote=t_data["quote"],
             indicators=t_data["indicators"],
             fundamental_data=f_data,
-            mode=request.mode
+            mode=target_mode
         )
         
         # 5. Cache and return
         cache_manager.set(summary_cache_key, analysis, ttl_seconds=900)
         
-        if request.mode == "metrics_only":
-            # Return full structural data for Portfolio View
+        if request.mode in ["metrics_only", "decision_brief", "technical_brief", "fundamental_brief"]:
+            # Return full structural data for Portfolio View or detailed briefs
             return {
-                "analysis": analysis, # Empty string
+                "analysis": analysis,
                 "technical": t_data,
                 "fundamental": f_data
             }
