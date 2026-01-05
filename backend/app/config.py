@@ -5,8 +5,14 @@ import os
 import logging
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables - try root first, then backend/
+if os.path.exists(".env"):
+    load_dotenv(".env")
+elif os.path.exists("backend/.env"):
+    load_dotenv("backend/.env")
+else:
+    # If we are already in backend/
+    load_dotenv()
 
 # Configure logging
 logging.basicConfig(

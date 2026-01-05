@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 /**
@@ -9,28 +9,40 @@ import axios from 'axios';
  * @param {string} description - Brief subtitle
  * @param {string} endpoint - API endpoint for fetching data
  * @param {object} requestParams - Parameters for the POST request (symbol, exchange, etc.)
+ * @param {boolean} defaultOpen - Whether the section should be open and fetch on mount
  * @param {function} children - Render prop function that receives the loaded data
  */
-function LazyAccordionSection({ title, icon, description, endpoint, requestParams, children }) {
-    const [isOpen, setIsOpen] = useState(false);
+function LazyAccordionSection({ title, icon, description, endpoint, requestParams, defaultOpen = false, children }) {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
     const [isLoading, setIsLoading] = useState(false);
     const [data, setData] = useState(null);
     const [error, setError] = useState(null);
 
+    // Initial fetch if defaultOpen is true
+    useEffect(() => {
+        if (defaultOpen && !data && !isLoading) {
+            fetchData();
+        }
+    }, [requestParams, endpoint]);
+
+    const fetchData = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const response = await axios.post(endpoint, requestParams);
+            setData(response.data);
+        } catch (err) {
+            console.error(`Failed to load ${title}:`, err);
+            setError(err.response?.data?.detail || err.message || 'Failed to load data');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleToggle = async () => {
         // If opening and no data yet, fetch it
         if (!isOpen && !data && !isLoading) {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const response = await axios.post(endpoint, requestParams);
-                setData(response.data);
-            } catch (err) {
-                console.error(`Failed to load ${title}:`, err);
-                setError(err.response?.data?.detail || err.message || 'Failed to load data');
-            } finally {
-                setIsLoading(false);
-            }
+            await fetchData();
         }
         setIsOpen(!isOpen);
     };
