@@ -93,7 +93,7 @@ const RiskConstraintPanel = ({ riskConstraints, riskSummary }) => {
                                 Risk Constraints
                             </h3>
                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                                Multi-Dimensional Risk Assessment
+                                Institutional Monitoring Dimensions
                             </p>
                         </div>
                     </div>
@@ -104,7 +104,7 @@ const RiskConstraintPanel = ({ riskConstraints, riskSummary }) => {
                                 {riskSummary.overall_risk}
                             </p>
                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                                Overall Risk
+                                Aggregate Severity
                             </p>
                         </div>
                     )}

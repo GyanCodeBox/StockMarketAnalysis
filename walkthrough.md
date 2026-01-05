@@ -54,5 +54,17 @@ The project maintains a 4-layer testing architecture (L1-L4):
 - Tests are automatically executed via GitHub Actions on every push to `main`.
 - See `.github/workflows/` for configuration.
 
+## 7. Institutional Methodology & Onboarding
+TERMINAL.AI is designed for institutional decision support, emphasizing structural awareness over directional prediction.
+
+- **Onboarding Overlay**: Appeares on first-run to set the correct mental model: "Information informs judgment; it doesn't prescribe action."
+- **Methodology Button**: Click the **Methodology** button (Help icon) in the Terminal or Portfolio header at any time to re-read the briefing.
+- **Institutional Glossary**: A full source of truth for all analytical terms is available in `docs/glossary.md`.
+
+### Key Copy Disciplines
+- **Confluence Alignment**: Focuses on where price structure meets business reality.
+- **Priority Score**: A relative ranking metric (0-100) for portfolio prioritization.
+- **Risk Severity**: Monitoring dimensions rather than "Red Flags".
+
 ---
-*Disclaimer: Portfolio View is a monitoring and prioritization layer. It does not generate signals or recommendations.*
+*Disclaimer: TERMINAL.AI is a disciplined decision-support platform. It does not provide buy/sell signals, price targets, or financial advice.*

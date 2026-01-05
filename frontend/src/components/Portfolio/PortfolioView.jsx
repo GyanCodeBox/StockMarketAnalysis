@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import PortfolioInput from './PortfolioInput';
 import PortfolioSummaryBar from './PortfolioSummaryBar';
 import PortfolioTable from './PortfolioTable';
-import { LayoutDashboard, LogOut } from 'lucide-react';
+import { LayoutDashboard, LogOut, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import OnboardingOverlay from '../OnboardingOverlay';
 
 const PortfolioView = () => {
     const navigate = useNavigate();
@@ -11,6 +12,7 @@ const PortfolioView = () => {
     const [loading, setLoading] = useState(false);
     const [portfolioData, setPortfolioData] = useState(null);
     const [activeFilter, setActiveFilter] = useState('ALL');
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
     const handleAnalyze = async (symbols) => {
         setLoading(true);
@@ -62,12 +64,21 @@ const PortfolioView = () => {
                         </div>
                     </div>
 
-                    <button
-                        onClick={() => navigate('/')}
-                        className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors"
-                    >
-                        Back to Terminal
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setShowOnboarding(true)}
+                            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-indigo-400 rounded-lg transition-colors"
+                            title="System Methodology & Safety Briefing"
+                        >
+                            <HelpCircle size={20} />
+                        </button>
+                        <button
+                            onClick={() => navigate('/')}
+                            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors"
+                        >
+                            Back to Terminal
+                        </button>
+                    </div>
                 </header>
 
                 {viewState === 'input' ? (
@@ -85,8 +96,8 @@ const PortfolioView = () => {
                                         key={filter}
                                         onClick={() => setActiveFilter(filter)}
                                         className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeFilter === filter
-                                                ? 'bg-indigo-600 text-white shadow-lg'
-                                                : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                                            ? 'bg-indigo-600 text-white shadow-lg'
+                                            : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                                             }`}
                                     >
                                         {filter}
@@ -108,6 +119,10 @@ const PortfolioView = () => {
                     </div>
                 )}
             </div>
+            <OnboardingOverlay
+                forceShow={showOnboarding}
+                onClose={() => setShowOnboarding(false)}
+            />
         </div>
     );
 };

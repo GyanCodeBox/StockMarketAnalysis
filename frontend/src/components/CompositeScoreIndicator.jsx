@@ -47,10 +47,10 @@ const CompositeScoreIndicator = ({ compositeData }) => {
                         </div>
                         <div>
                             <h3 className="text-lg font-black text-white uppercase tracking-tight">
-                                Composite Regime Score
+                                Portfolio Priority Score
                             </h3>
                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                                Portfolio Ranking Signal
+                                Comparative Regime Quality Ranking
                             </p>
                         </div>
                     </div>
@@ -115,7 +115,7 @@ const CompositeScoreIndicator = ({ compositeData }) => {
                         <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-800/50">
                             <div className="flex items-center gap-2 mb-2">
                                 <TrendingUp size={12} className="text-indigo-400" />
-                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Technical</span>
+                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Technical Strength</span>
                             </div>
                             <p className="text-2xl font-black text-indigo-400">{breakdown?.technical_pct?.toFixed(0)}%</p>
                             <p className="text-[9px] font-bold text-slate-500 mt-1">
@@ -127,7 +127,7 @@ const CompositeScoreIndicator = ({ compositeData }) => {
                         <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-800/50">
                             <div className="flex items-center gap-2 mb-2">
                                 <Activity size={12} className="text-emerald-400" />
-                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Fundamental</span>
+                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Fundamental Grade</span>
                             </div>
                             <p className="text-2xl font-black text-emerald-400">{breakdown?.fundamental_pct?.toFixed(0)}%</p>
                             <p className="text-[9px] font-bold text-slate-500 mt-1">
@@ -139,7 +139,7 @@ const CompositeScoreIndicator = ({ compositeData }) => {
                         <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-800/50">
                             <div className="flex items-center gap-2 mb-2">
                                 <Zap size={12} className="text-amber-400" />
-                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Stability</span>
+                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Regime Stability</span>
                             </div>
                             <p className="text-2xl font-black text-amber-400">{breakdown?.stability_pct?.toFixed(0)}%</p>
                             <p className="text-[9px] font-bold text-slate-500 mt-1">

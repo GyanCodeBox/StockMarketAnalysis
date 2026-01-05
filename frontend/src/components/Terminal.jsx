@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, HelpCircle } from 'lucide-react'
+import OnboardingOverlay from './OnboardingOverlay'
 import StockInput from './StockInput'
 import StockInfo from './StockInfo'
 import StockChart from './StockChart'
@@ -25,6 +26,7 @@ function Terminal() {
     const [activeTab, setActiveTab] = useState('technical')
     const [isChartMaximized, setIsChartMaximized] = useState(false)
     const [selectedStructure, setSelectedStructure] = useState(null)
+    const [showOnboarding, setShowOnboarding] = useState(false)
 
     // Auto-trigger analysis if URL param exists
 
@@ -134,10 +136,20 @@ function Terminal() {
                         </div>
 
                         {/* Portfolio Link (Absolute Right) */}
-                        <Link to="/portfolio" className="absolute right-0 top-2 flex items-center gap-2 group px-4 py-2 rounded-xl bg-indigo-900/20 border border-indigo-500/30 hover:bg-indigo-900/40 hover:border-indigo-500/50 transition-all">
-                            <LayoutDashboard size={18} className="text-indigo-400 group-hover:text-white transition-colors" />
-                            <span className="text-xs font-bold uppercase tracking-widest text-indigo-300 group-hover:text-white">Portfolio View</span>
-                        </Link>
+                        <div className="absolute right-0 top-2 flex items-center gap-3">
+                            <button
+                                onClick={() => setShowOnboarding(true)}
+                                className="flex items-center gap-2 group px-4 py-2 rounded-xl bg-slate-800/50 border border-slate-700 hover:bg-slate-800 transition-all"
+                                title="System Methodology & Safety Briefing"
+                            >
+                                <HelpCircle size={18} className="text-slate-400 group-hover:text-indigo-400 transition-colors" />
+                                <span className="text-xs font-bold uppercase tracking-widest text-slate-400 group-hover:text-white">Methodology</span>
+                            </button>
+                            <Link to="/portfolio" className="flex items-center gap-2 group px-4 py-2 rounded-xl bg-indigo-900/20 border border-indigo-500/30 hover:bg-indigo-900/40 hover:border-indigo-500/50 transition-all">
+                                <LayoutDashboard size={18} className="text-indigo-400 group-hover:text-white transition-colors" />
+                                <span className="text-xs font-bold uppercase tracking-widest text-indigo-300 group-hover:text-white">Portfolio View</span>
+                            </Link>
+                        </div>
                     </header>
                 )}
 
@@ -280,6 +292,11 @@ function Terminal() {
                 )}
             </div>
             {!isChartMaximized && <ScrollNavigation />}
+
+            <OnboardingOverlay
+                forceShow={showOnboarding}
+                onClose={() => setShowOnboarding(false)}
+            />
         </div>
     )
 }

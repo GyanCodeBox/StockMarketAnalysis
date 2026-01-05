@@ -19,7 +19,7 @@ export default function TechnicalScoreCard({ scoreData }) {
                         <CircularProgress value={total_score} color={color} />
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                             <span className="text-4xl font-bold text-white tracking-tighter shadow-sm">{total_score}</span>
-                            <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Score</span>
+                            <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-none mt-1">Strength Index</span>
                         </div>
                     </div>
                     <div className="text-center">
@@ -103,6 +103,13 @@ export default function TechnicalScoreCard({ scoreData }) {
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Disclaimer Footer */}
+            <div className="mt-4 pt-3 border-t border-slate-800/50">
+                <p className="text-[9px] text-slate-500 italic">
+                    Structural quantitative analysis. Scoring evaluates market context and price-volume alignment, not directional predictability.
+                </p>
             </div>
         </div>
     );

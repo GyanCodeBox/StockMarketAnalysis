@@ -80,17 +80,17 @@ const ConfluenceBanner = ({ confluenceData }) => {
                                 </p>
                             )}
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">
-                                Tech-Fundamental Confluence
+                                Institutional Confluence Alignment
                             </p>
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-2 items-start md:items-end">
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getRiskBadgeColor()}`}>
-                            Risk: {risk_level}
+                            Risk Severity: {risk_level}
                         </span>
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${styles.border} ${styles.text}`}>
-                            Signal: {signalStrength}
+                            Alignment Depth: {signalStrength}
                         </span>
                     </div>
                 </div>
@@ -152,6 +152,17 @@ const ConfluenceBanner = ({ confluenceData }) => {
                         </p>
                     </div>
                 )}
+
+                {/* Cognitive Safety Footer */}
+                <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                    <p className="text-[9px] text-slate-500 italic max-w-2xl leading-relaxed">
+                        Confluence evaluates the alignment between technical structure and fundamental reality.
+                        Alignment is an indicator of regime quality, not a directional prediction.
+                    </p>
+                    <div className="flex items-center gap-2 px-3 py-1 bg-slate-950/50 rounded-lg border border-white/5">
+                        <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest italic">Decision Support Logic</span>
+                    </div>
+                </div>
             </div>
         </div>
     );

@@ -72,7 +72,7 @@ const FundamentalHealthBanner = ({ scoreData }) => {
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <span className="text-3xl font-black text-white">{value}</span>
-                            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-none">Global Score</span>
+                            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-none text-center px-2">Relative Quality Score</span>
                         </div>
                     </div>
                     <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg ${getPhaseColor(phase)}`}>
@@ -144,8 +144,19 @@ const FundamentalHealthBanner = ({ scoreData }) => {
                                 </div>
                             ))}
                         </div>
+                        <p className="text-[8px] text-slate-500 italic mt-2">Monitoring dimensions; not predictions.</p>
                     </div>
                 )}
+            </div>
+
+            {/* Global Disclaimer Footer */}
+            <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                <p className="text-[9px] font-medium text-slate-500 italic">
+                    Analytical assessment of business quality & efficiency. Focuses on consistency, not absolute magnitude.
+                </p>
+                <div className="flex items-center gap-2 px-2 py-0.5 bg-slate-950/50 rounded-md border border-white/5">
+                    <span className="text-[8px] font-black text-slate-600 uppercase tracking-tighter italic">Non-Predictive Intelligence</span>
+                </div>
             </div>
         </div>
     );
